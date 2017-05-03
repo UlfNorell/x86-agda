@@ -29,4 +29,4 @@ jit code = writeMachineCode $ compile $ prologue ++ code ++ epilogue
 main : IO ⊤
 main =
   do fun ← jit code
-  -| print (fun 201)
+  -| print (fun 0x10000000)
