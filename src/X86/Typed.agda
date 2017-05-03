@@ -112,27 +112,20 @@ erase = foldPath (_∷_ ∘ eraseInstr) []
 
 initialState : S
 [rax] initialState = %rax
-[rcx] initialState = %rcx
-[rdx] initialState = %rdx
+[rcx] initialState = undef
+[rdx] initialState = undef
 [rbx] initialState = %rbx
 [rsp] initialState = %rsp
 [rbp] initialState = %rbp
-[rsi] initialState = %rsi
+[rsi] initialState = undef
 [rdi] initialState = %rdi
 stack initialState = []
 isRet initialState = false
 
-fun-post : (Nat → Nat) → S → S → Set
-fun-post f s₀ s₁ =
-  (∀ {φ} → eval φ ([rax] s₁) ≡ f (φ rdi)) ∧
-  [rbx] s₁ ≡ [rbx] s₀ ∧
-  [rsp] s₁ ≡ [rsp] s₀ ∧
-  [rbp] s₁ ≡ [rbp] s₀
-
 data X86Fun (f : Nat → Nat) : Set where
   mkFun : ∀ {s : S}
-            {{_ : ∀ {φ} → eval φ ([rax] s) ≡ f (φ rdi)}} →
-            {{_ : [rbx] s ≡ reg rbx}} →
-            {{_ : [rsp] s ≡ reg rsp}} →
-            {{_ : [rbp] s ≡ reg rbp}} →
+            {{_ : ∀ {φ} → eval φ ([rax] s) ≡ just (f (φ rdi))}} →
+            {{_ : [rbx] s ≡ %rbx}} →
+            {{_ : [rsp] s ≡ %rsp}} →
+            {{_ : [rbp] s ≡ %rbp}} →
             X86Code initialState s → X86Fun f

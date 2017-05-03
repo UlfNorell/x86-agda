@@ -14,16 +14,18 @@ data Dst : Set where
   reg : Reg → Dst
 
 data Exp : Set where
+  undef : Exp
   reg : Reg → Exp
   imm : Nat → Exp
   _⊕_ : Exp → Exp → Exp
   _⊛_ : Exp → Exp → Exp
 
-eval : (Reg → Nat) → Exp → Nat
-eval φ (reg r) = φ r
-eval φ (imm n) = n
-eval φ (e ⊕ e₁) = eval φ e + eval φ e₁
-eval φ (e ⊛ e₁) = eval φ e * eval φ e₁
+eval : (Reg → Nat) → Exp → Maybe Nat
+eval φ undef   = nothing
+eval φ (reg r) = just (φ r)
+eval φ (imm n) = just n
+eval φ (e ⊕ e₁) = ⦇ eval φ e + eval φ e₁ ⦈
+eval φ (e ⊛ e₁) = ⦇ eval φ e * eval φ e₁ ⦈
 
 pattern %rax = reg rax
 pattern %rcx = reg rcx
