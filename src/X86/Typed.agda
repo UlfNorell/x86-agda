@@ -3,6 +3,7 @@ module X86.Typed where
 
 open import Prelude
 open import Container.Path
+open import Numeric.Nat.Divide
 
 open import X86.Common
 import X86.Untyped as Untyped
@@ -52,6 +53,44 @@ set %rbp e s = record s { [rbp] = e }
 set %rsi e s = record s { [rsi] = e }
 set %rdi e s = record s { [rdi] = e }
 
+loadEnv : Reg → NF
+loadEnv rsp = just (0 ∷ 1 ∷ [])
+loadEnv _   = nothing
+
+getStackOffs : Exp → Maybe Nat
+getStackOffs sp =
+  case norm loadEnv sp of λ where
+    -- sp = n + %rsp
+    (just (pos n ∷ pos 1 ∷ [])) →
+      case 8 divides? n of λ where
+        (yes (factor q eq)) → just q
+        (no  _) → nothing
+    _ → nothing
+
+data PopPre (s : S) : Set where
+  instance popPre : ∀ {n e} →
+                      isRet s ≡ false →
+                      getStackOffs (get %rsp s) ≡ just (suc n) →
+                      index (stack s) n ≡ just e →
+                      PopPre s
+
+load : (s : S) → PopPre s → Exp
+load s (popPre {e = e} _ _ _) = e
+
+data PushPre (s : S) : Set where
+  instance pushPre : ∀ {n} → isRet s ≡ false →
+                             getStackOffs (get %rsp s) ≡ just n →
+                             PushPre s
+
+storeNth : {A : Set} → Nat → A → A → List A → List A
+storeNth zero _ y []          = y ∷ []
+storeNth zero _ y (x ∷ xs)    = y ∷ xs
+storeNth (suc n) z y []       = z ∷ storeNth n z y []
+storeNth (suc n) z y (x ∷ xs) = x ∷ storeNth n z y xs
+
+store : (s : S) → PushPre s → Exp → List Exp
+store s (pushPre {n = n} _ _) e = storeNth n undef e (stack s)
+
 ret-pre : S → Set
 ret-pre s = isRet s ≡ false
 
@@ -68,32 +107,34 @@ add-pre : Val → Dst → S → Set
 add-pre _ _ s = isRet s ≡ false
 
 add-next : Val → Dst → S → S
-add-next src dst s = set dst (getD dst s ⊕ get src s) s
+add-next src dst s = set dst (getD dst s + get src s) s
 
 sub-pre : Val → Dst → S → Set
 sub-pre _ _ s = isRet s ≡ false
 
 sub-next : Val → Dst → S → S
-sub-next src dst s = set dst (getD dst s ⊝ get src s) s
+sub-next src dst s = set dst (getD dst s - get src s) s
 
 imul-pre : Val → Dst → S → Set
 imul-pre _ _ s = isRet s ≡ false
 
 imul-next : Val → Dst → S → S
-imul-next src dst s = set dst (getD dst s ⊛ get src s) s
+imul-next src dst s = set dst (getD dst s * get src s) s
 
 push-pre : Val → S → Set
-push-pre _ s = isRet s ≡ false
+push-pre _ s = PushPre s
 
-push-next : Val → S → S
-push-next v s = record s { stack = get v s ∷ stack s }
+push-next : (val : Val) (s : S) {{_ : push-pre val s}} → S
+push-next v s {{pre}} =
+  record s { stack = store s pre (get v s)
+           ; [rsp] = [rsp] s + 8 }
 
 pop-pre : Dst → S → Set
-pop-pre _ s = Nonempty (stack s) ∧ isRet s ≡ false
+pop-pre _ s = PopPre s
 
 pop-next : (dst : Dst) (s : S) {{_ : pop-pre dst s}} → S
-pop-next dst s {{prf {{nonempty {x = x} {xs = xs}}}}} =
-  record (set dst x s) { stack = xs }
+pop-next dst s {{pre}} =
+  record (set dst (load s pre) s) { [rsp] = [rsp] s - 8 }
 
 data Instr (s : S) : S → Set where
   ret  : {{pre : ret-pre s}} → Instr s (ret-next s)
@@ -130,9 +171,13 @@ initialState : S
 stack initialState = []
 isRet initialState = false
 
+funEnv : Int → Reg → Maybe Int
+funEnv n rdi = just n
+funEnv _ _   = nothing
+
 data X86Fun (f : Int → Int) : Set where
   mkFun : ∀ {s : S}
-            {{_ : ∀ {φ} → eval φ ([rax] s) ≡ just (f (φ rdi))}} →
+            {{_ : ∀ {n} → eval (funEnv n) ([rax] s) ≡ just (f n)}} →
             {{_ : [rbx] s ≡ %rbx}} →
             {{_ : [rsp] s ≡ %rsp}} →
             {{_ : [rbp] s ≡ %rbp}} →

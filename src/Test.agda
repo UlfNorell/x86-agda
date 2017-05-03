@@ -11,18 +11,22 @@ open import Text.Printf
 import X86.Compile as C
 import X86.Untyped as Raw
 
-code : X86Fun (λ x → (x + x - 100) * (x + x) * 2)
-code = mkFun
-  ( mov  %rdi %rdx
+
+code : X86Code initialState _
+code
+  = mov  %rdi %rdx
   ∷ add  %rdi %rdx
-  ∷ push %rdx
+  ∷ push %rdx {{pushPre refl refl}}
   ∷ sub  100  %rdx
   ∷ mov  %rdx %rax
-  ∷ pop  %rdi
+  ∷ pop  %rdi {{popPre refl refl refl}} -- gah: instance search fail!
   ∷ imul %rdi %rax
   ∷ imul 2    %rax
   ∷ ret
-  ∷ [] )
+  ∷ []
+
+testfun : X86Fun (λ x → (x + x - 100) * (x + x) * 2)
+testfun = mkFun code
 
 finalState : ∀ {f} → X86Fun f → S
 finalState (mkFun {s = s} _) = s
@@ -37,7 +41,7 @@ usage =
 
 run : List Nat → IO ⊤
 run xs =
-  do fun ← jit code
+  do fun ← jit testfun
   -| print (map (fun ∘ pos) xs)
 
 main : IO ⊤
