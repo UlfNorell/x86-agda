@@ -20,7 +20,7 @@ open import Text.Printf
 --   ∷ ret
 --   ∷ []
 
-code : X86Fun (λ x → 2 * ((x + x) * (16 + (x + x))))
+code : X86Fun (λ x → (x + x + 16) * (x + x) * 2)
 code = mkFun
   ( push %rbp
   ∷ mov  %rsp %rbp

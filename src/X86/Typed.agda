@@ -68,13 +68,13 @@ add-pre : Val → Dst → S → Set
 add-pre _ _ s = isRet s ≡ false
 
 add-next : Val → Dst → S → S
-add-next src dst s = set dst (get src s ⊕ getD dst s) s
+add-next src dst s = set dst (getD dst s ⊕ get src s) s
 
 imul-pre : Val → Dst → S → Set
 imul-pre _ _ s = isRet s ≡ false
 
 imul-next : Val → Dst → S → S
-imul-next src dst s = set dst (get src s ⊛ getD dst s) s
+imul-next src dst s = set dst (getD dst s ⊛ get src s) s
 
 push-pre : Val → S → Set
 push-pre _ s = isRet s ≡ false
