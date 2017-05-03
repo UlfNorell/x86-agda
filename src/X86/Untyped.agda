@@ -1,5 +1,5 @@
 
-module Asm where
+module X86.Untyped where
 
 open import Prelude
 
@@ -32,6 +32,11 @@ pattern %rbp = reg rbp
 pattern %rsi = reg rsi
 pattern %rdi = reg rdi
 
+instance
+  NumVal : Number Val
+  Number.Constraint NumVal _ = ⊤
+  fromNat {{NumVal}} n = imm n
+
 regIx : Reg → Nat
 regIx rax = 0
 regIx rcx = 1
@@ -57,14 +62,14 @@ compileInstr (mov (imm val) (reg dst)) =
   0x48 ∷ 0xc7 ∷ 0xc0 + regIx dst ∷ bytes 4 val
 
 compileInstr (add (reg src) (reg dst)) =
-  0x48 ∷ 0x01 ∷ 0xc0 + regIx dst + regIx dst ∷ []
+  0x48 ∷ 0x01 ∷ 0xc0 + 8 * regIx src + regIx dst ∷ []
 compileInstr (add (imm val) (reg dst)) =
-  0x48 ∷ 0x05 ∷ bytes 4 val
+  0x48 ∷ 0x81 ∷ 0xc0 + regIx dst ∷ bytes 4 val
 
 compileInstr (imul (reg src) (reg dst)) =
-  0x48 ∷ 0x0f ∷ 0xaf ∷ 0xc0 + 8 * regIx src + regIx dst ∷ []
+  0x48 ∷ 0x0f ∷ 0xaf ∷ 0xc0 + 8 * regIx dst + regIx src ∷ []
 compileInstr (imul (imm val) (reg dst)) =
-  0x48 ∷ 0x69 ∷ 0xc0 + regIx dst ∷ bytes 4 val
+  0x48 ∷ 0x69 ∷ 0xd0 + regIx dst ∷ bytes 4 val
 
 compileInstr (push (reg r)) =
   0x50 + regIx r ∷ []
