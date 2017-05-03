@@ -8,21 +8,24 @@ open import Container.Traversable
 open import Container.Path
 open import Text.Printf
 
-prologue : X86Code _ _
-prologue
-  = push %rbp
+-- prologue : ∀ {s} → X86Code s _
+-- prologue
+--   = push %rbp
+--   ∷ mov  %rsp %rbp
+--   ∷ []
+
+-- epilogue : ∀ {s} {{_ : isRet s ≡ false}} → X86Code s _
+-- epilogue
+--   = pop %rbp
+--   ∷ ret
+--   ∷ []
+
+code : X86Fun (λ x → 2 * ((x + x) * (16 + (x + x))))
+code = mkFun
+  ( push %rbp
   ∷ mov  %rsp %rbp
-  ∷ []
-
-epilogue : X86Code _ _
-epilogue
-  = pop %rbp
-  ∷ ret
-  ∷ []
-
-code : X86Code _ _
-code
-  = mov  %rdi %rdx
+  --
+  ∷ mov  %rdi %rdx
   ∷ add  %rdi %rdx
   ∷ push %rdx
   ∷ add  0x10 %rdx
@@ -30,10 +33,13 @@ code
   ∷ pop  %rdi
   ∷ imul %rdi %rax
   ∷ imul 2    %rax
-  ∷ []
+  --
+  ∷ pop %rbp
+  ∷ ret
+  ∷ [] )
 
-jit : ∀ {i j} → X86Code i j → IO (Nat → Nat)
-jit code = writeMachineCode $ compile $ prologue <+> code <+> epilogue
+jit : ∀ {f} → X86Fun f → IO (Nat → Nat)
+jit (mkFun code) = writeMachineCode $ compile code
 
 usage : IO ⊤
 usage =
