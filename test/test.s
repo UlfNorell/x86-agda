@@ -1,8 +1,6 @@
 .section __TEXT,__text
 .globl _main
 _main:
-  push %rbp
-  mov %rsp, %rbp
-  add %rdi, %rcx
-  imul $0x10203040, %rcx, %rdi
+  sub $0x10203040, %rdi
+  mov %rdi, %rax
   ret

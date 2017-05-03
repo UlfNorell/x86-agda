@@ -8,6 +8,7 @@ data Instr : Set where
   ret  : Instr
   mov  : Val → Dst → Instr
   add  : Val → Dst → Instr
+  sub  : Val → Dst → Instr
   imul : Val → Dst → Instr
   push : Val → Instr
   pop  : Dst → Instr

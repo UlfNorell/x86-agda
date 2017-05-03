@@ -6,7 +6,7 @@ open import Container.Path
 
 open import X86.Common
 import X86.Untyped as Untyped
-open Untyped using (ret; mov; add; imul; push; pop)
+open Untyped using (ret; mov; add; sub; imul; push; pop)
 
 infixr 2 _∧_
 record _∧_ (P Q : Set) : Set where
@@ -70,6 +70,12 @@ add-pre _ _ s = isRet s ≡ false
 add-next : Val → Dst → S → S
 add-next src dst s = set dst (getD dst s ⊕ get src s) s
 
+sub-pre : Val → Dst → S → Set
+sub-pre _ _ s = isRet s ≡ false
+
+sub-next : Val → Dst → S → S
+sub-next src dst s = set dst (getD dst s ⊝ get src s) s
+
 imul-pre : Val → Dst → S → Set
 imul-pre _ _ s = isRet s ≡ false
 
@@ -93,6 +99,7 @@ data Instr (s : S) : S → Set where
   ret  : {{pre : ret-pre s}} → Instr s (ret-next s)
   mov  : (src : Val) (dst : Dst) {{pre : mov-pre src dst s}} → Instr s (mov-next src dst s)
   add  : (src : Val) (dst : Dst) {{pre : add-pre src dst s}} → Instr s (add-next src dst s)
+  sub  : (src : Val) (dst : Dst) {{pre : sub-pre src dst s}} → Instr s (sub-next src dst s)
   imul : (src : Val) (dst : Dst) {{pre : imul-pre src dst s}} → Instr s (imul-next src dst s)
   push : (val : Val) {{pre : push-pre val s}} → Instr s (push-next val s)
   pop  : (dst : Dst) {{pre : pop-pre dst s}} → Instr s (pop-next dst s)
@@ -103,6 +110,7 @@ eraseInstr : ∀ {i j} → Instr i j → Untyped.Instr
 eraseInstr ret = ret
 eraseInstr (mov src dst)  = mov src dst
 eraseInstr (add src dst)  = add src dst
+eraseInstr (sub src dst)  = sub src dst
 eraseInstr (imul val dst) = imul val dst
 eraseInstr (push val)     = push val
 eraseInstr (pop dst)      = pop dst
@@ -122,7 +130,7 @@ initialState : S
 stack initialState = []
 isRet initialState = false
 
-data X86Fun (f : Nat → Nat) : Set where
+data X86Fun (f : Int → Int) : Set where
   mkFun : ∀ {s : S}
             {{_ : ∀ {φ} → eval φ ([rax] s) ≡ just (f (φ rdi))}} →
             {{_ : [rbx] s ≡ %rbx}} →

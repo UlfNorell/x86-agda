@@ -63,7 +63,7 @@ allocateMemory size = mmap nullPtr size (pWrite .|. pExec) (mAnon .|. mPriv)
 #-}
 
 postulate
-  writeMachineCode : List Nat → IO (Nat → Nat)
+  writeMachineCode : List Nat → IO (Int → Int)
 
 {-# COMPILE GHC writeMachineCode = fmap ((toInteger .) . (. fromInteger))
                                  . writeMachineCode . map fromInteger #-}

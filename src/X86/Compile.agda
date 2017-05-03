@@ -19,9 +19,20 @@ regIx rsi = 6
 regIx rdi = 7
 
 -- Little endian
-bytes : Nat → Nat → MachineCode
-bytes 0       n = []
-bytes (suc w) n = n mod 256 ∷ bytes w (n div 256)
+bytesNat : Nat → Nat → MachineCode
+bytesNat 0       n = []
+bytesNat (suc w) n = n mod 256 ∷ bytesNat w (n div 256)
+
+_mod′_ : Nat → Nat → Nat
+a mod′ 0     = 0
+a mod′ suc b = a mod suc b
+
+bytes : Nat → Int → MachineCode
+bytes w       (pos n)    = bytesNat w n
+bytes 0       (negsuc n) = []
+bytes (suc w) (negsuc n) =
+  let max = 256 ^ w * 128 in
+  bytesNat (suc w) (2 * max - (n + 1) mod′ max)
 
 compileInstr : Instr → MachineCode
 
@@ -36,6 +47,11 @@ compileInstr (add (reg src) (reg dst)) =
   0x48 ∷ 0x01 ∷ 0xc0 + 8 * regIx src + regIx dst ∷ []
 compileInstr (add (imm val) (reg dst)) =
   0x48 ∷ 0x81 ∷ 0xc0 + regIx dst ∷ bytes 4 val
+
+compileInstr (sub (reg src) (reg dst)) =
+  0x48 ∷ 0x29 ∷ 0xc0 + 8 * regIx src + regIx dst ∷ []
+compileInstr (sub (imm val) (reg dst)) =
+  0x48 ∷ 0x81 ∷ 0xe8 + regIx dst ∷ bytes 4 val
 
 compileInstr (imul (reg src) (reg dst)) =
   0x48 ∷ 0x0f ∷ 0xaf ∷ 0xc0 + 8 * regIx dst + regIx src ∷ []

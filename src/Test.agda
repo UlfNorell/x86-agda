@@ -8,12 +8,15 @@ open import Container.Traversable
 open import Container.Path
 open import Text.Printf
 
-code : X86Fun (λ x → (x + x + 1) * (x + x) * 2)
+import X86.Compile as C
+import X86.Untyped as Raw
+
+code : X86Fun (λ x → (x + x - 100) * (x + x) * 2)
 code = mkFun
   ( mov  %rdi %rdx
   ∷ add  %rdi %rdx
   ∷ push %rdx
-  ∷ add  1    %rdx
+  ∷ sub  100  %rdx
   ∷ mov  %rdx %rax
   ∷ pop  %rdi
   ∷ imul %rdi %rax
@@ -21,7 +24,10 @@ code = mkFun
   ∷ ret
   ∷ [] )
 
-jit : ∀ {f} → X86Fun f → IO (Nat → Nat)
+finalState : ∀ {f} → X86Fun f → S
+finalState (mkFun {s = s} _) = s
+
+jit : ∀ {f} → X86Fun f → IO (Int → Int)
 jit (mkFun code) = writeMachineCode $ compile code
 
 usage : IO ⊤
@@ -32,8 +38,7 @@ usage =
 run : List Nat → IO ⊤
 run xs =
   do fun ← jit code
-  -| print (map fun xs)
-
+  -| print (map (fun ∘ pos) xs)
 
 main : IO ⊤
 main =
