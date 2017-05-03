@@ -8,12 +8,12 @@ open import Container.Traversable
 open import Container.Path
 open import Text.Printf
 
-code : X86Fun (λ x → (x + x + 16) * (x + x) * 2)
+code : X86Fun (λ x → (x + x + 1) * (x + x) * 2)
 code = mkFun
   ( mov  %rdi %rdx
   ∷ add  %rdi %rdx
   ∷ push %rdx
-  ∷ add  0x10 %rdx
+  ∷ add  1    %rdx
   ∷ mov  %rdx %rax
   ∷ pop  %rdi
   ∷ imul %rdi %rax
