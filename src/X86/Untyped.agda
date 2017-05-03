@@ -69,7 +69,7 @@ compileInstr (add (imm val) (reg dst)) =
 compileInstr (imul (reg src) (reg dst)) =
   0x48 ∷ 0x0f ∷ 0xaf ∷ 0xc0 + 8 * regIx dst + regIx src ∷ []
 compileInstr (imul (imm val) (reg dst)) =
-  0x48 ∷ 0x69 ∷ 0xd0 + regIx dst ∷ bytes 4 val
+  0x48 ∷ 0x69 ∷ 0xc0 + 8 * regIx dst + regIx dst ∷ bytes 4 val
 
 compileInstr (push (reg r)) =
   0x50 + regIx r ∷ []
