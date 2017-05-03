@@ -8,24 +8,9 @@ open import Container.Traversable
 open import Container.Path
 open import Text.Printf
 
--- prologue : ∀ {s} → X86Code s _
--- prologue
---   = push %rbp
---   ∷ mov  %rsp %rbp
---   ∷ []
-
--- epilogue : ∀ {s} {{_ : isRet s ≡ false}} → X86Code s _
--- epilogue
---   = pop %rbp
---   ∷ ret
---   ∷ []
-
 code : X86Fun (λ x → (x + x + 16) * (x + x) * 2)
 code = mkFun
-  ( push %rbp
-  ∷ mov  %rsp %rbp
-  --
-  ∷ mov  %rdi %rdx
+  ( mov  %rdi %rdx
   ∷ add  %rdi %rdx
   ∷ push %rdx
   ∷ add  0x10 %rdx
@@ -33,8 +18,6 @@ code = mkFun
   ∷ pop  %rdi
   ∷ imul %rdi %rax
   ∷ imul 2    %rax
-  --
-  ∷ pop %rbp
   ∷ ret
   ∷ [] )
 
