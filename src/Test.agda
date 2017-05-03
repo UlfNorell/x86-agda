@@ -21,8 +21,13 @@ epilogue
 
 code : Asm
 code
-  = imul %rdi %rdi
-  ∷ mov  %rdi %rax
+  = mov  %rdi %rdx
+  ∷ add  %rdi %rdx
+  ∷ push %rdx
+  ∷ add  0x10 %rdx
+  ∷ mov  %rdx %rax
+  ∷ pop  %rdi
+  ∷ imul %rdi %rax
   ∷ []
 
 jit : Asm → IO (Nat → Nat)
