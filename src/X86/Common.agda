@@ -2,9 +2,12 @@
 module X86.Common where
 
 open import Prelude
+open import Tactic.Deriving.Eq
 
 data Reg : Set where
   rax rcx rdx rbx rsp rbp rsi rdi : Reg
+
+unquoteDecl EqReg = deriveEq EqReg (quote Reg)
 
 data Val : Set where
   reg : Reg → Val
@@ -52,6 +55,12 @@ _*n_ : Polynomial → Polynomial → Polynomial
 (x ∷ xs) *n [] = []
 (x ∷ xs) *n (y ∷ ys) = x * y ∷p map (x *_) ys +n map (_* y) xs +n (0 ∷p xs *n ys)
 
+singleRegEnv : Reg → Reg → NF
+singleRegEnv r r₁ =
+  case r == r₁ of λ where
+    (yes _) → just (0 ∷ 1 ∷ [])
+    (no  _) → nothing
+
 -- TODO: generalise to eval into Subtractive Semiring
 norm : (Reg → NF) → Exp → NF
 norm φ undef = nothing
@@ -91,6 +100,7 @@ instance
   zro {{SemiringExp}} = 0
   one {{SemiringExp}} = 1
   _+_ {{SemiringExp}} a (imm (pos 0)) = a
+  _+_ {{SemiringExp}} (a ⊝ imm b) (imm c) = a + imm (c - b)
   _+_ {{SemiringExp}} a b = a ⊕ b
   _*_ {{SemiringExp}} = _⊛_
 

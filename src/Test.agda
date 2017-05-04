@@ -16,23 +16,26 @@ code : X86Code initialState _
 code
   = mov  %rdi %rdx
   ∷ add  %rdi %rdx
-  ∷ push %rdx {{pushPre refl refl}}
+  ∷ push %rdx
   ∷ sub  100  %rdx
   ∷ mov  %rdx %rax
-  ∷ pop  %rdi {{popPre refl refl refl}} -- gah: instance search fail!
+  ∷ pop  %rdi
   ∷ imul %rdi %rax
   ∷ imul 2    %rax
   ∷ ret
   ∷ []
 
-testfun : X86Fun (λ x → (x + x - 100) * (x + x) * 2)
-testfun = mkFun code
+fun : X86Fun (λ x → (x + x - 100) * (x + x) * 2)
+fun = mkFun code
 
 finalState : ∀ {f} → X86Fun f → S
 finalState (mkFun {s = s} _) = s
 
+compileFun : ∀ {f} → X86Fun f → MachineCode
+compileFun (mkFun code) = compile code
+
 jit : ∀ {f} → X86Fun f → IO (Int → Int)
-jit (mkFun code) = writeMachineCode $ compile code
+jit = writeMachineCode ∘ compileFun
 
 usage : IO ⊤
 usage =
@@ -41,8 +44,8 @@ usage =
 
 run : List Nat → IO ⊤
 run xs =
-  do fun ← jit testfun
-  -| print (map (fun ∘ pos) xs)
+  do f ← jit fun
+  -| print (map (f ∘ pos) xs)
 
 main : IO ⊤
 main =

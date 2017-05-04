@@ -1,7 +1,7 @@
 
 module X86.Typed where
 
-open import Prelude
+open import Prelude hiding (IsJust; fromJust)
 open import Container.Path
 open import Numeric.Nat.Divide
 
@@ -9,14 +9,11 @@ open import X86.Common
 import X86.Untyped as Untyped
 open Untyped using (ret; mov; add; sub; imul; push; pop)
 
-infixr 2 _∧_
-record _∧_ (P Q : Set) : Set where
-  instance constructor prf
-  field
-    {{fst}} : P
-    {{snd}} : Q
+data IsJust {A : Set} : Maybe A → Set where
+  instance just : ∀ x → IsJust (just x)
 
-open _∧_ public
+fromJust : ∀ {A} {m : Maybe A} → IsJust m → A
+fromJust (just x) = x
 
 record S : Set where
   field
@@ -25,9 +22,6 @@ record S : Set where
     isRet : Bool
 
 open S public
-
-data Nonempty {A : Set} : List A → Set where
-  instance nonempty : ∀ {x xs} → Nonempty (x ∷ xs)
 
 get : Val → S → Exp
 get %rax s = [rax] s
@@ -53,34 +47,35 @@ set %rbp e s = record s { [rbp] = e }
 set %rsi e s = record s { [rsi] = e }
 set %rdi e s = record s { [rdi] = e }
 
-loadEnv : Reg → NF
-loadEnv rsp = just (0 ∷ 1 ∷ [])
-loadEnv _   = nothing
-
 getStackOffs : Exp → Maybe Nat
 getStackOffs sp =
-  case norm loadEnv sp of λ where
-    -- sp = n + %rsp
-    (just (pos n ∷ pos 1 ∷ [])) →
-      case 8 divides? n of λ where
+  case norm (singleRegEnv rsp) sp of λ where
+    (just (pos 0 ∷ pos 1 ∷ [])) → just 0
+    -- sp = %rsp - n
+    (just (negsuc n ∷ pos 1 ∷ [])) →
+      case 8 divides? (suc n) of λ where
         (yes (factor q eq)) → just q
         (no  _) → nothing
     _ → nothing
 
+getStackElem : Exp → List Exp → Maybe Exp
+getStackElem sp st =
+  case getStackOffs sp of λ where
+    (just (suc n)) → index st n
+    _              → nothing
+
 data PopPre (s : S) : Set where
-  instance popPre : ∀ {n e} →
-                      isRet s ≡ false →
-                      getStackOffs (get %rsp s) ≡ just (suc n) →
-                      index (stack s) n ≡ just e →
-                      PopPre s
+  instance popPre : isRet s ≡ false →
+                    IsJust (getStackElem (get %rsp s) (stack s)) →
+                    PopPre s
 
 load : (s : S) → PopPre s → Exp
-load s (popPre {e = e} _ _ _) = e
+load s (popPre _ j) = fromJust j
 
 data PushPre (s : S) : Set where
-  instance pushPre : ∀ {n} → isRet s ≡ false →
-                             getStackOffs (get %rsp s) ≡ just n →
-                             PushPre s
+  instance pushPre : isRet s ≡ false →
+                     IsJust (getStackOffs (get %rsp s)) →
+                     PushPre s
 
 storeNth : {A : Set} → Nat → A → A → List A → List A
 storeNth zero _ y []          = y ∷ []
@@ -89,7 +84,7 @@ storeNth (suc n) z y []       = z ∷ storeNth n z y []
 storeNth (suc n) z y (x ∷ xs) = x ∷ storeNth n z y xs
 
 store : (s : S) → PushPre s → Exp → List Exp
-store s (pushPre {n = n} _ _) e = storeNth n undef e (stack s)
+store s (pushPre _ j) e = storeNth (fromJust j) undef e (stack s)
 
 ret-pre : S → Set
 ret-pre s = isRet s ≡ false
@@ -127,14 +122,14 @@ push-pre _ s = PushPre s
 push-next : (val : Val) (s : S) {{_ : push-pre val s}} → S
 push-next v s {{pre}} =
   record s { stack = store s pre (get v s)
-           ; [rsp] = [rsp] s + 8 }
+           ; [rsp] = [rsp] s - 8 }
 
 pop-pre : Dst → S → Set
 pop-pre _ s = PopPre s
 
 pop-next : (dst : Dst) (s : S) {{_ : pop-pre dst s}} → S
 pop-next dst s {{pre}} =
-  record (set dst (load s pre) s) { [rsp] = [rsp] s - 8 }
+  record (set dst (load s pre) s) { [rsp] = [rsp] s + 8 }
 
 data Instr (s : S) : S → Set where
   ret  : {{pre : ret-pre s}} → Instr s (ret-next s)
@@ -175,10 +170,13 @@ funEnv : Int → Reg → Maybe Int
 funEnv n rdi = just n
 funEnv _ _   = nothing
 
+_isReg_ : Exp → Reg → Set
+e isReg r = norm (singleRegEnv r) e ≡ just (0 ∷ 1 ∷ [])
+
 data X86Fun (f : Int → Int) : Set where
   mkFun : ∀ {s : S}
             {{_ : ∀ {n} → eval (funEnv n) ([rax] s) ≡ just (f n)}} →
-            {{_ : [rbx] s ≡ %rbx}} →
-            {{_ : [rsp] s ≡ %rsp}} →
-            {{_ : [rbp] s ≡ %rbp}} →
+            {{_ : [rbx] s isReg rbx}} →
+            {{_ : [rsp] s isReg rsp}} →
+            {{_ : [rbp] s isReg rbp}} →
             X86Code initialState s → X86Fun f
