@@ -11,14 +11,16 @@ NonZeroM (just x) = NonZeroInt x
 data Reg : Set where
   rax rcx rdx rbx rsp rbp rsi rdi : Reg
 
-unquoteDecl EqReg = deriveEq EqReg (quote Reg)
-
 data Val : Set where
   reg : Reg → Val
   imm : Int → Val
 
 data Dst : Set where
   reg : Reg → Dst
+
+unquoteDecl EqReg = deriveEq EqReg (quote Reg)
+unquoteDecl EqVal = deriveEq EqVal (quote Val)
+unquoteDecl EqDst = deriveEq EqDst (quote Dst)
 
 data Exp : Set
 eval : (Reg → Maybe Int) → Exp → Maybe Int

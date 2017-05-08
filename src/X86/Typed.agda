@@ -119,14 +119,13 @@ imul-next src dst s = set dst (getD dst s * get src s) s
 record idiv-pre (val : Dst) (s : S) : Set where
   instance constructor idivPre
   field {{nonz}} : (∀ {φ} → NonZeroM (eval φ (getD val s)))
+        notrdx   : IsTrue (isNo (val == %rdx))
         notret   : isRet s ≡ false
 
 idiv-next : (val : Dst) (s : S) {{_ : idiv-pre val s}} → S
 idiv-next val s =
-  set %rdx (n modE getD val s) $
-  set %rax (n divE getD val s) s
-  where
-    n = get %rdx s * 0x10000000000000000 + get %rax s
+  set %rdx (get %rax s modE getD val s) $
+  set %rax (get %rax s divE getD val s) s
 
 push-pre : Val → S → Set
 push-pre _ s = PushPre s

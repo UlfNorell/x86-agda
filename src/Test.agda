@@ -13,13 +13,13 @@ import X86.Untyped as Raw
 
 
 code : X86Code initialState _
-code = mov 0 %rdx
-     ∷ mov %rdi %rax
-     ∷ add %rsi %rax
+code = mov %rdi %rax
+     ∷ sub %rsi %rax
      ∷ mov 2 %rdi
      ∷ idiv %rdi
      ∷ ret
      ∷ []
+
   -- = mov  %rdi %rdx
   -- ∷ add  %rsi %rdx
   -- ∷ push %rdx
@@ -34,7 +34,7 @@ code = mov 0 %rdx
 
 -- fun : X86Fun λ x y → ((x + y - 100) * (x + y)) quot 2
 -- fun : X86Fun λ x y → (x + y - 100) * (x + y)
-fun : X86Fun λ x y → (x + y) quot 2
+fun : X86Fun λ x y → (x - y) quot 2
 fun = mkFun code
 
 finalState : ∀ {f} → X86Fun f → S

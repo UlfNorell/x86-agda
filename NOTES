@@ -5,8 +5,22 @@
 - unsafePerformIO and use specification at compile time?
   - It might be tricky to guarantee no inlining...
 
+- model concatenation for idiv properly
+  - or always sign extend
+
+- improve errors for preconditions
+  - push/pop
+  - idiv
+
+- allow preconditions on function arguments
+  (for instance, so you could implement div and mod)
+  - not clear how to make that work!
+
+- get rid of undef?
+
 - An interesting example
 
 - Outline talk
   - Be explicit about what's the trusted code
+  - How to present implementation? Be nice to do some incremental typing.
 
