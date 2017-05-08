@@ -20,7 +20,9 @@ import System.IO.Unsafe
 import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as VM
 
-writeMachineCode :: [Word8] -> IO (Int -> Int)
+type Function a = a -> a
+
+writeMachineCode :: [Word8] -> IO (Function Int)
 writeMachineCode code = do
   let len = length code
   mem  <- allocateMemory (fromIntegral len)
@@ -30,9 +32,9 @@ writeMachineCode code = do
   return (getFunction mem)
 
 foreign import ccall "dynamic"
-  mkFun :: FunPtr (Int -> Int) -> (Int -> Int)
+  mkFun :: FunPtr (Function Int) -> Function Int
 
-getFunction :: Ptr Word8 -> (Int -> Int)
+getFunction :: Ptr Word8 -> Function Int
 getFunction mem = mkFun (unsafeCoerce mem)
 
 foreign import ccall unsafe "sys/mman.h mmap"
@@ -61,14 +63,16 @@ mPriv = 0x02
 allocateMemory :: CSize -> IO (Ptr Word8)
 allocateMemory size = mmap nullPtr size (pWrite .|. pExec) (mAnon .|. mPriv)
 
+castFun :: (Num a, Integral a) => Function a -> Function Integer
+castFun f x = toInteger $ f (fromInteger x)
+
 -- {-# NOINLINE writeMachineCode' #-}
--- writeMachineCode' :: [Integer] -> Integer -> Integer
--- writeMachineCode' = (toInteger .) . (. fromInteger)
+-- writeMachineCode' :: [Integer] -> Function Integer
+-- writeMachineCode' = castFun
 --                   . unsafePerformIO . writeMachineCode . map fromInteger
 
-writeMachineCode' :: [Integer] -> IO (Integer -> Integer)
-writeMachineCode' = fmap ((toInteger .) . (. fromInteger))
-                  . writeMachineCode . map fromInteger
+writeMachineCode' :: [Integer] -> IO (Function Integer)
+writeMachineCode' = fmap castFun . writeMachineCode . map fromInteger
 
 #-}
 
