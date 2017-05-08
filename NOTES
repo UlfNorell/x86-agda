@@ -18,6 +18,12 @@
 
 - get rid of undef?
 
+- could I do loops?
+  - would need to compute addresses in compiler (easy)
+  - type safety (hard)
+  - target: implement gcd
+    - requires wf recursion!
+
 - An interesting example
 
 - Outline talk
