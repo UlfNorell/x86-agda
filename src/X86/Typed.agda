@@ -7,7 +7,7 @@ open import Numeric.Nat.Divide
 
 open import X86.Common
 import X86.Untyped as Untyped
-open Untyped using (ret; mov; add; sub; imul; push; pop)
+open Untyped using (ret; mov; add; sub; imul; idiv; push; pop)
 
 data IsJust {A : Set} : Maybe A → Set where
   instance just : ∀ x → IsJust (just x)
@@ -116,6 +116,18 @@ imul-pre _ _ s = isRet s ≡ false
 imul-next : Val → Dst → S → S
 imul-next src dst s = set dst (getD dst s * get src s) s
 
+record idiv-pre (val : Dst) (s : S) : Set where
+  instance constructor idivPre
+  field {{nonz}} : (∀ {φ} → NonZeroM (eval φ (getD val s)))
+        notret   : isRet s ≡ false
+
+idiv-next : (val : Dst) (s : S) {{_ : idiv-pre val s}} → S
+idiv-next val s =
+  set %rdx (n modE getD val s) $
+  set %rax (n divE getD val s) s
+  where
+    n = get %rdx s * 0x10000000000000000 + get %rax s
+
 push-pre : Val → S → Set
 push-pre _ s = PushPre s
 
@@ -137,6 +149,7 @@ data Instr (s : S) : S → Set where
   add  : (src : Val) (dst : Dst) {{pre : add-pre src dst s}} → Instr s (add-next src dst s)
   sub  : (src : Val) (dst : Dst) {{pre : sub-pre src dst s}} → Instr s (sub-next src dst s)
   imul : (src : Val) (dst : Dst) {{pre : imul-pre src dst s}} → Instr s (imul-next src dst s)
+  idiv : (val : Dst) {{pre : idiv-pre val s}} → Instr s (idiv-next val s)
   push : (val : Val) {{pre : push-pre val s}} → Instr s (push-next val s)
   pop  : (dst : Dst) {{pre : pop-pre dst s}} → Instr s (pop-next dst s)
 
@@ -148,6 +161,7 @@ eraseInstr (mov src dst)  = mov src dst
 eraseInstr (add src dst)  = add src dst
 eraseInstr (sub src dst)  = sub src dst
 eraseInstr (imul val dst) = imul val dst
+eraseInstr (idiv val)     = idiv val
 eraseInstr (push val)     = push val
 eraseInstr (pop dst)      = pop dst
 

@@ -13,19 +13,28 @@ import X86.Untyped as Raw
 
 
 code : X86Code initialState _
-code
-  = mov  %rdi %rdx
-  ∷ add  %rsi %rdx
-  ∷ push %rdx
-  ∷ sub  100  %rdx
-  ∷ mov  %rdx %rax
-  ∷ pop  %rdi
-  ∷ imul %rdi %rax
-  ∷ imul 2    %rax
-  ∷ ret
-  ∷ []
+code = mov 0 %rdx
+     ∷ mov %rdi %rax
+     ∷ add %rsi %rax
+     ∷ mov 2 %rdi
+     ∷ idiv %rdi
+     ∷ ret
+     ∷ []
+  -- = mov  %rdi %rdx
+  -- ∷ add  %rsi %rdx
+  -- ∷ push %rdx
+  -- ∷ sub  100  %rdx
+  -- ∷ mov  %rdx %rax
+  -- ∷ pop  %rdi
+  -- ∷ imul %rdi %rax
+  -- ∷ mov  0    %rdx
+  -- ∷ idiv 2
+  -- ∷ ret
+  -- ∷ []
 
-fun : X86Fun (λ x y → (x + y - 100) * (x + y) * 2)
+-- fun : X86Fun λ x y → ((x + y - 100) * (x + y)) quot 2
+-- fun : X86Fun λ x y → (x + y - 100) * (x + y)
+fun : X86Fun λ x y → (x + y) quot 2
 fun = mkFun code
 
 finalState : ∀ {f} → X86Fun f → S
@@ -33,6 +42,9 @@ finalState (mkFun {s = s} _) = s
 
 compileFun : ∀ {f} → X86Fun f → MachineCode
 compileFun (mkFun code) = compile code
+
+showMachineCode : ∀ {s s₁} → X86Code s s₁ → String
+showMachineCode = foldr (printf "%02x %s") "" ∘ compile
 
 jit : ∀ {f} → X86Fun f → IO (Int → Int → Int)
 jit = writeMachineCode ∘ compileFun

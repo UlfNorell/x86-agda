@@ -10,6 +10,7 @@ data Instr : Set where
   add  : Val → Dst → Instr
   sub  : Val → Dst → Instr
   imul : Val → Dst → Instr
+  idiv : Dst → Instr
   push : Val → Instr
   pop  : Dst → Instr
 

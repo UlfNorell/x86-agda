@@ -58,6 +58,9 @@ compileInstr (imul (reg src) (reg dst)) =
 compileInstr (imul (imm val) (reg dst)) =
   0x48 ∷ 0x69 ∷ 0xc0 + 8 * regIx dst + regIx dst ∷ bytes 4 val
 
+compileInstr (idiv (reg dst)) =
+  0x48 ∷ 0xf7 ∷ 0xf0 + regIx dst ∷ []
+
 compileInstr (push (reg r)) =
   0x50 + regIx r ∷ []
 compileInstr (push (imm v)) =
