@@ -183,10 +183,26 @@ e isReg r =
   else Obligation: ("Preservation of " & show r & ". Need to show " & show e & " ≡ " & show r & ".")
                    {e ≃ reg r}
 
+mkEnv : (a b c d e f g h : Int) → Reg → Int
+mkEnv a b c d e f g h rax = a
+mkEnv a b c d e f g h rcx = b
+mkEnv a b c d e f g h rdx = c
+mkEnv a b c d e f g h rbx = d
+mkEnv a b c d e f g h rsp = e
+mkEnv a b c d e f g h rbp = f
+mkEnv a b c d e f g h rsi = g
+mkEnv a b c d e f g h rdi = h
+
+_isFun_ : Exp → (Int → Int) → Set
+e isFun f =
+  ∀ {n vax vcx vdx vbx vsp vbp vsi} →
+    eval (just ∘ mkEnv vax vcx vdx vbx vsp vbp vsi n) e ≡ just (f n)
 
 data X86Fun (f : Int → Int) : Set where
   mkFun : ∀ {s : S}
-            {{_ : ∀ {n} → eval (funEnv n) ([rax] s) ≡ just (f n)}} →
+            -- {{sem : ∀ {n} → eval (funEnv n) ([rax] s) ≡ just (f n)}} →
+            -- {{sem : ∀ {φ} → eval (just ∘ φ) ([rax] s) ≡ just (f (φ rdi))}} →
+            {{sem  : [rax] s isFun f}} →
             {{prbx : [rbx] s isReg rbx}} →
             {{prsp : [rsp] s isReg rsp}} →
             {{prbp : [rbp] s isReg rbp}} →
