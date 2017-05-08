@@ -15,7 +15,7 @@ import X86.Untyped as Raw
 code : X86Code initialState _
 code
   = mov  %rdi %rdx
-  ∷ add  %rdi %rdx
+  ∷ add  %rsi %rdx
   ∷ push %rdx
   ∷ sub  100  %rdx
   ∷ mov  %rdx %rax
@@ -25,7 +25,7 @@ code
   ∷ ret
   ∷ []
 
-fun : X86Fun (λ x → (x + x - 100) * (x + x) * 2)
+fun : X86Fun (λ x y → (x + y - 100) * (x + y) * 2)
 fun = mkFun code
 
 finalState : ∀ {f} → X86Fun f → S
@@ -34,18 +34,19 @@ finalState (mkFun {s = s} _) = s
 compileFun : ∀ {f} → X86Fun f → MachineCode
 compileFun (mkFun code) = compile code
 
-jit : ∀ {f} → X86Fun f → IO (Int → Int)
+jit : ∀ {f} → X86Fun f → IO (Int → Int → Int)
 jit = writeMachineCode ∘ compileFun
 
 usage : IO ⊤
 usage =
   do prog ← getProgName
-  -| putStrLn ("Usage: " & prog & " N₁ .. Nₙ")
+  -| putStrLn ("Usage: " & prog & " X Y")
 
 run : List Nat → IO ⊤
-run xs =
+run (x ∷ y ∷ []) =
   do f ← jit fun
-  -| print (map (f ∘ pos) xs)
+  -| print (f (pos x) (pos y))
+run _ = usage
 
 main : IO ⊤
 main =

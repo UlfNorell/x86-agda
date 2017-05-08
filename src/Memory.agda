@@ -20,7 +20,7 @@ import System.IO.Unsafe
 import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as VM
 
-type Function a = a -> a
+type Function a = a -> a -> a
 
 writeMachineCode :: [Word8] -> IO (Function Int)
 writeMachineCode code = do
@@ -64,7 +64,7 @@ allocateMemory :: CSize -> IO (Ptr Word8)
 allocateMemory size = mmap nullPtr size (pWrite .|. pExec) (mAnon .|. mPriv)
 
 castFun :: (Num a, Integral a) => Function a -> Function Integer
-castFun f x = toInteger $ f (fromInteger x)
+castFun f x y = toInteger $ f (fromInteger x) (fromInteger y)
 
 -- {-# NOINLINE writeMachineCode' #-}
 -- writeMachineCode' :: [Integer] -> Function Integer
@@ -77,6 +77,6 @@ writeMachineCode' = fmap castFun . writeMachineCode . map fromInteger
 #-}
 
 postulate
-  writeMachineCode : List Nat → IO (Int → Int)
+  writeMachineCode : List Nat → IO (Int → Int → Int)
 
 {-# COMPILE GHC writeMachineCode = writeMachineCode' #-}

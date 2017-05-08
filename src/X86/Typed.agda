@@ -156,12 +156,12 @@ erase = foldPath (_∷_ ∘ eraseInstr) []
 
 initialState : S
 [rax] initialState = %rax
-[rcx] initialState = undef
-[rdx] initialState = undef
+[rcx] initialState = %rcx
+[rdx] initialState = %rdx
 [rbx] initialState = %rbx
 [rsp] initialState = %rsp
 [rbp] initialState = %rbp
-[rsi] initialState = undef
+[rsi] initialState = %rsi
 [rdi] initialState = %rdi
 stack initialState = []
 isRet initialState = false
@@ -193,12 +193,12 @@ mkEnv a b c d e f g h rbp = f
 mkEnv a b c d e f g h rsi = g
 mkEnv a b c d e f g h rdi = h
 
-_isFun_ : Exp → (Int → Int) → Set
+_isFun_ : Exp → (Int → Int → Int) → Set
 e isFun f =
-  ∀ {n vax vcx vdx vbx vsp vbp vsi} →
-    eval (just ∘ mkEnv vax vcx vdx vbx vsp vbp vsi n) e ≡ just (f n)
+  ∀ {x y vax vcx vdx vbx vsp vbp} →
+    eval (just ∘ mkEnv vax vcx vdx vbx vsp vbp y x) e ≡ just (f x y)
 
-data X86Fun (f : Int → Int) : Set where
+data X86Fun (f : Int → Int → Int) : Set where
   mkFun : ∀ {s : S}
             -- {{sem : ∀ {n} → eval (funEnv n) ([rax] s) ≡ just (f n)}} →
             -- {{sem : ∀ {φ} → eval (just ∘ φ) ([rax] s) ≡ just (f (φ rdi))}} →
