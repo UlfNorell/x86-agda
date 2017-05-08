@@ -15,6 +15,7 @@ import Foreign.Storable
 import Foreign.Marshal.Utils
 import System.Posix.Types
 import Unsafe.Coerce
+import System.IO.Unsafe
 
 import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as VM
@@ -60,10 +61,18 @@ mPriv = 0x02
 allocateMemory :: CSize -> IO (Ptr Word8)
 allocateMemory size = mmap nullPtr size (pWrite .|. pExec) (mAnon .|. mPriv)
 
+-- {-# NOINLINE writeMachineCode' #-}
+-- writeMachineCode' :: [Integer] -> Integer -> Integer
+-- writeMachineCode' = (toInteger .) . (. fromInteger)
+--                   . unsafePerformIO . writeMachineCode . map fromInteger
+
+writeMachineCode' :: [Integer] -> IO (Integer -> Integer)
+writeMachineCode' = fmap ((toInteger .) . (. fromInteger))
+                  . writeMachineCode . map fromInteger
+
 #-}
 
 postulate
   writeMachineCode : List Nat → IO (Int → Int)
 
-{-# COMPILE GHC writeMachineCode = fmap ((toInteger .) . (. fromInteger))
-                                 . writeMachineCode . map fromInteger #-}
+{-# COMPILE GHC writeMachineCode = writeMachineCode' #-}
