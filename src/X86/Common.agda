@@ -62,6 +62,7 @@ singleRegEnv r r₁ =
     (no  _) → nothing
 
 -- TODO: generalise to eval into Subtractive Semiring
+-- Although, once I add div and mod that doesn't make sense anymore.
 norm : (Reg → NF) → Exp → NF
 norm φ undef = nothing
 norm φ (reg r) = φ r
@@ -108,3 +109,21 @@ instance
   _-_    {{SubExp}} (a ⊕ imm b) (imm c) = a + imm (b - c)
   _-_    {{SubExp}} a b = a ⊝ b
   negate {{SubExp}} a   = 0 - a
+
+  ShowReg : Show Reg
+  showsPrec {{ShowReg}} _ rax = showString "%rax"
+  showsPrec {{ShowReg}} _ rcx = showString "%rcx"
+  showsPrec {{ShowReg}} _ rdx = showString "%rdx"
+  showsPrec {{ShowReg}} _ rbx = showString "%rbx"
+  showsPrec {{ShowReg}} _ rsp = showString "%rsp"
+  showsPrec {{ShowReg}} _ rbp = showString "%rbp"
+  showsPrec {{ShowReg}} _ rsi = showString "%rsi"
+  showsPrec {{ShowReg}} _ rdi = showString "%rdi"
+
+  ShowExp : Show Exp
+  showsPrec {{ShowExp}} p undef = showString "undef"
+  showsPrec {{ShowExp}} p (reg r) = shows r
+  showsPrec {{ShowExp}} p (imm n) = shows n
+  showsPrec {{ShowExp}} p (e ⊕ e₁) = showParen (p >? 6) (showsPrec 6 e ∘ showString " + " ∘ showsPrec 7 e₁)
+  showsPrec {{ShowExp}} p (e ⊝ e₁) = showParen (p >? 6) (showsPrec 6 e ∘ showString " - " ∘ showsPrec 7 e₁)
+  showsPrec {{ShowExp}} p (e ⊛ e₁) = showParen (p >? 7) (showsPrec 7 e ∘ showString " * " ∘ showsPrec 8 e₁)

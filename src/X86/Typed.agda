@@ -170,13 +170,24 @@ funEnv : Int → Reg → Maybe Int
 funEnv n rdi = just n
 funEnv _ _   = nothing
 
+_≃_ : Exp → Exp → Set
+e ≃ e₁ = ∀ φ → eval (just ∘ φ) e ≡ eval (just ∘ φ) e₁
+
+data Obligation: (s : String) {P : Set} : Set where
+  proof : P → Obligation: s {P}
+
 _isReg_ : Exp → Reg → Set
-e isReg r = norm (singleRegEnv r) e ≡ just (0 ∷ 1 ∷ [])
+e isReg r =
+  ifYes norm (singleRegEnv r) e == just (0 ∷ 1 ∷ [])
+  then ⊤
+  else Obligation: ("Preservation of " & show r & ". Need to show " & show e & " ≡ " & show r & ".")
+                   {e ≃ reg r}
+
 
 data X86Fun (f : Int → Int) : Set where
   mkFun : ∀ {s : S}
             {{_ : ∀ {n} → eval (funEnv n) ([rax] s) ≡ just (f n)}} →
-            {{_ : [rbx] s isReg rbx}} →
-            {{_ : [rsp] s isReg rsp}} →
-            {{_ : [rbp] s isReg rbp}} →
+            {{prbx : [rbx] s isReg rbx}} →
+            {{prsp : [rsp] s isReg rsp}} →
+            {{prbp : [rbp] s isReg rbp}} →
             X86Code initialState s → X86Fun f
