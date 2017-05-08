@@ -1,0 +1,12 @@
+
+- Inferrable semantics?
+  - A little bit tricky to make work!
+
+- unsafePerformIO and use specification at compile time?
+  - It might be tricky to guarantee no inlining...
+
+- An interesting example
+
+- Outline talk
+  - Be explicit about what's the trusted code
+
