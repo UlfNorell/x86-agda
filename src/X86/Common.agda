@@ -133,6 +133,7 @@ instance
 
   SubExp : Subtractive Exp
   _-_    {{SubExp}} (a ⊕ imm b) (imm c) = a + imm (b - c)
+  _-_    {{SubExp}} (a ⊝ imm b) (imm c) = a - imm (b + c)
   _-_    {{SubExp}} a b = a ⊝ b
   negate {{SubExp}} a   = 0 - a
 
