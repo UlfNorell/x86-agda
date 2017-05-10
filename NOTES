@@ -8,15 +8,12 @@
 - model concatenation for idiv properly
   - or always sign extend
 
-- improve errors for preconditions
-  - push/pop
-  - idiv
-
 - allow preconditions on function arguments
   (for instance, so you could implement div and mod)
   - not clear how to make that work!
 
 - get rid of undef?
+  - no used when pushing past the (previous) top of the stack
 
 - could I do loops?
   - would need to compute addresses in compiler (easy)
