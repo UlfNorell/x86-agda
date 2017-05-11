@@ -22,30 +22,32 @@ unquoteDecl EqReg = deriveEq EqReg (quote Reg)
 unquoteDecl EqVal = deriveEq EqVal (quote Val)
 unquoteDecl EqDst = deriveEq EqDst (quote Dst)
 
-data Exp : Set
-eval : (Reg → Maybe Int) → Exp → Maybe Int
+Env = Reg → Int
 
-NonZeroE : Exp → Set
-NonZeroE e = ∀ {φ} → NonZeroM (eval φ e)
+data Exp (P : Env → Set) : Set
+eval : ∀ {P} (φ : Env) {{_ : P φ}} → Exp P → Maybe Int
 
-data Exp where
-  undef : Exp
-  reg : Reg → Exp
-  imm : Int → Exp
-  _⊕_ _⊝_ _⊛_ : Exp → Exp → Exp
-  divE-by modE-by : (b : Exp) {{nz : NonZeroE b}} → Exp → Exp
+NonZeroE : ∀ {P} → Exp P → Set
+NonZeroE {P} e = ∀ {φ} {{_ : P φ}} → NonZeroM (eval φ e)
+
+data Exp P where
+  undef : Exp P
+  reg : Reg → Exp P
+  imm : Int → Exp P
+  _⊕_ _⊝_ _⊛_ : Exp P → Exp P → Exp P
+  divE-by modE-by : (b : Exp P) {{nz : NonZeroE b}} → Exp P → Exp P
 
 syntax divE-by y x = x divE y
 syntax modE-by y x = x modE y
 
-evalNZ : ((b : Int) {{_ : NonZeroInt b}} → Int → Int) →
-         (Reg → Maybe Int) → (b : Exp) {{_ : NonZeroE b}} → Exp → Maybe Int
+evalNZ : ∀ {P} → ((b : Int) {{_ : NonZeroInt b}} → Int → Int) →
+         (φ : Env) {{_ : P φ}} → (b : Exp P) {{_ : NonZeroE b}} → Exp P → Maybe Int
 evalNZ f φ e₁ {{nz}} e with eval φ e₁ | mkInstance (nz {φ})
 ... | nothing | _ = nothing
 ... | just v  | _ = (| (f v) (eval φ e) |)
 
 eval φ undef   = nothing
-eval φ (reg r) = φ r
+eval φ (reg r) = just (φ r)
 eval φ (imm n) = just n
 eval φ (e ⊕ e₁) = (| eval φ e + eval φ e₁ |)
 eval φ (e ⊝ e₁) = (| eval φ e - eval φ e₁ |)
@@ -84,7 +86,7 @@ singleRegEnv r r₁ =
     (yes _) → just (0 ∷ 1 ∷ [])
     (no  _) → nothing
 
-norm : (Reg → NF) → Exp → NF
+norm : ∀ {P} → (Reg → NF) → Exp P → NF
 norm φ undef = nothing
 norm φ (reg r) = φ r
 norm φ (imm n) = just (n ∷ [])
@@ -112,15 +114,15 @@ instance
   Negative.Constraint NegVal _ = ⊤
   fromNeg {{NegVal}} n = imm (fromNeg n)
 
-  NumExp : Number Exp
+  NumExp : ∀ {P} → Number (Exp P)
   Number.Constraint NumExp _ = ⊤
   fromNat {{NumExp}} n = imm (fromNat n)
 
-  NegExp : Negative Exp
+  NegExp : ∀ {P} → Negative (Exp P)
   Negative.Constraint NegExp _ = ⊤
   fromNeg {{NegExp}} n = imm (fromNeg n)
 
-  SemiringExp : Semiring Exp
+  SemiringExp : ∀ {P} → Semiring (Exp P)
   zro {{SemiringExp}} = 0
   one {{SemiringExp}} = 1
   _+_ {{SemiringExp}} a (imm (pos 0)) = a
@@ -131,7 +133,7 @@ instance
   _*_ {{SemiringExp}} a (imm (pos 0)) = imm (pos 0)
   _*_ {{SemiringExp}} a b = a ⊛ b
 
-  SubExp : Subtractive Exp
+  SubExp : ∀ {P} → Subtractive (Exp P)
   _-_    {{SubExp}} (a ⊕ imm b) (imm c) = a + imm (b - c)
   _-_    {{SubExp}} (a ⊝ imm b) (imm c) = a - imm (b + c)
   _-_    {{SubExp}} a b = a ⊝ b
@@ -147,7 +149,7 @@ instance
   showsPrec {{ShowReg}} _ rsi = showString "%rsi"
   showsPrec {{ShowReg}} _ rdi = showString "%rdi"
 
-  ShowExp : Show Exp
+  ShowExp : ∀ {P} → Show (Exp P)
   showsPrec {{ShowExp}} p undef = showString "undef"
   showsPrec {{ShowExp}} p (reg r) = shows r
   showsPrec {{ShowExp}} p (imm n) = shows n

@@ -11,12 +11,12 @@ open import Text.Printf
 import X86.Compile as C
 import X86.Untyped as Raw
 
+Pre : Precondition
+Pre _ y = NonZeroInt y
 
-code : X86Code initialState _
+code : X86Code Pre initS _
 code = mov %rdi %rax
-     ∷ sub %rsi %rax
-     ∷ mov 2 %rdi
-     ∷ idiv %rdi
+     ∷ idiv %rsi
      ∷ ret
      ∷ []
 
@@ -34,20 +34,22 @@ code = mov %rdi %rax
 
 -- fun : X86Fun λ x y → ((x + y - 100) * (x + y)) quot 2
 -- fun : X86Fun λ x y → (x + y - 100) * (x + y)
-fun : X86Fun λ x y → (x - y) quot 2
+fun : X86Fun Pre λ x y → x quot y
 fun = mkFun code
 
-finalState : ∀ {f} → X86Fun f → S
+finalState : ∀ {P f} → X86Fun P f → S _
 finalState (mkFun {s = s} _) = s
 
-compileFun : ∀ {f} → X86Fun f → MachineCode
+compileFun : ∀ {P f} → X86Fun P f → MachineCode
 compileFun (mkFun code) = compile code
 
-showMachineCode : ∀ {s s₁} → X86Code s s₁ → String
+showMachineCode : ∀ {P s s₁} → X86Code P s s₁ → String
 showMachineCode = foldr (printf "%02x %s") "" ∘ compile
 
-jit : ∀ {f} → X86Fun f → IO (Int → Int → Int)
-jit = writeMachineCode ∘ compileFun
+jit : ∀ {P f} → X86Fun P f → IO (∀ x y {{_ : P x y}} → Int)
+jit fun =
+  do f ← writeMachineCode (compileFun fun)
+  -| pure (λ x y {{_}} → f x y)
 
 usage : IO ⊤
 usage =
@@ -55,9 +57,10 @@ usage =
   -| putStrLn ("Usage: " & prog & " X Y")
 
 run : List Nat → IO ⊤
-run (x ∷ y ∷ []) =
+run (x ∷ zero ∷ []) = putStrLn "Sorry, no division by 0."
+run (x ∷ suc y ∷ []) =
   do f ← jit fun
-  -| print (f (pos x) (pos y))
+  -| print (f (pos x) (pos (suc y)))
 run _ = usage
 
 main : IO ⊤
