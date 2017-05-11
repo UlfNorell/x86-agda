@@ -32,6 +32,15 @@ code = mov %rdi %rax
   -- ∷ ret
   -- ∷ []
 
+blumblumshubStep : X86Fun Pre λ x M → x * x rem M
+blumblumshubStep = mkFun
+  $ imul %rdi %rdi
+  ∷ mov  %rdi %rax
+  ∷ idiv %rsi
+  ∷ mov  %rdx %rax
+  ∷ ret
+  ∷ []
+
 -- fun : X86Fun λ x y → ((x + y - 100) * (x + y)) quot 2
 -- fun : X86Fun λ x y → (x + y - 100) * (x + y)
 fun : X86Fun Pre λ x y → x quot y
@@ -63,7 +72,24 @@ run (x ∷ suc y ∷ []) =
   -| print (f (pos x) (pos (suc y)))
 run _ = usage
 
+iterate : {A : Set} → Nat → (A → A) → A → A
+iterate zero    f x = x
+iterate (suc n) f x = iterate n f $! f x
+
+p q M : Int
+p = 32707
+q = 50023
+M = p * q
+
+runBBS : List Nat → IO ⊤
+runBBS (0 ∷ x ∷ n ∷ []) =
+  do step ← jit blumblumshubStep
+  -| print (iterate n (λ x → step x M) (pos x))
+runBBS (1 ∷ x ∷ n ∷ []) =
+  print (iterate n (λ x → x * x rem M) (pos x))
+runBBS _ = usage
+
 main : IO ⊤
 main =
   do args ← getArgs
-  -| maybe usage run (traverse parseNat args)
+  -| maybe usage runBBS (traverse parseNat args)

@@ -8,10 +8,6 @@
 - model concatenation for idiv properly
   - or always sign extend
 
-- allow preconditions on function arguments
-  (for instance, so you could implement div and mod)
-  - not clear how to make that work!
-
 - get rid of undef?
   - no used when pushing past the (previous) top of the stack
 
@@ -22,6 +18,12 @@
     - requires wf recursion!
 
 - An interesting example
+
+- Set up some benchmarking to show that it's blazingly fast!
+  Need a moderately interesting example for that. Some pseudo random number
+  generation?
+
+  Problem: casting between CInt and Integer!
 
 - Outline talk
   - Be explicit about what's the trusted code
