@@ -25,6 +25,8 @@
 
   Problem: casting between CInt and Integer!
 
+  Might be that I need loops to make it actually faster.
+
 - Outline talk
   - Be explicit about what's the trusted code
   - How to present implementation? Be nice to do some incremental typing.
