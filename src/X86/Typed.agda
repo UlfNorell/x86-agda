@@ -137,7 +137,7 @@ Precondition = Int → Int → Set
 EnvPrecondition : Precondition → Env → Set
 EnvPrecondition P φ = P (φ rdi) (φ rsi)
 
-data Instr (P : Precondition) (s : S (EnvPrecondition P)) : S (EnvPrecondition P) → Set where
+data Instr (P : Env → Set) (s : S P) : S P → Set where
 
   ret  : {{notret : isRet s ≡ false}} →
          Instr P s (ret-next s)
@@ -174,7 +174,7 @@ data Instr (P : Precondition) (s : S (EnvPrecondition P)) : S (EnvPrecondition P
          {{okrsp  : PopObligation (get %rsp s) (stack s)}} →
          Instr P s (pop-next dst s)
 
-X86Code : (P : Precondition) → S (EnvPrecondition P) → S (EnvPrecondition P) → Set
+X86Code : (P : Env → Set) → S P → S P → Set
 X86Code P = Path (Instr P)
 
 eraseInstr : ∀ {P i j} → Instr P i j → Untyped.Instr
@@ -239,4 +239,4 @@ data X86Fun (P : Precondition) (f : (x y : Int) {{_ : P x y}} → Int) : Set whe
             {{prbp : [rbp] s isReg rbp}} →
             {{isret : Obligation "Return" "Missing return from function."
                                  {isRet s ≡ true}}} →
-            X86Code P initialState s → X86Fun P f
+            X86Code (EnvPrecondition P) initialState s → X86Fun P f
