@@ -10,11 +10,12 @@ open import Text.Printf
 
 import X86.Compile as C
 import X86.Untyped as Raw
+open Raw using (mov; add; sub; imul; idiv; label; loop; push; pop; ret)
 
 Pre : Precondition
 Pre _ y = NonZeroInt y
 
-code : X86Code Pre initS _
+code : X86Code (EnvPrecondition Pre) initS _
 code = mov %rdi %rax
      ∷ idiv %rsi
      ∷ ret
@@ -41,14 +42,27 @@ blumblumshubStep = mkFun
   ∷ ret
   ∷ []
 
+blumblumRaw : Int → Raw.X86Code
+blumblumRaw M
+  = mov %rsi %rcx
+  ∷ mov %rdi %rax
+  ∷ mov (imm M) %rdi
+  ∷ label
+  ∷ imul %rax %rax
+  ∷ idiv %rdi
+  ∷ mov %rdx %rax
+  ∷ loop 0
+  ∷ ret
+  ∷ []
+
 rawCode : Raw.X86Code
 rawCode
-  = Raw.mov %rdi %rcx
-  ∷ Raw.label
-  ∷ Raw.imul %rsi %rsi
-  ∷ Raw.loop 0
-  ∷ Raw.mov %rsi %rax
-  ∷ Raw.ret
+  = mov %rdi %rcx
+  ∷ label
+  ∷ imul %rsi %rsi
+  ∷ loop 0
+  ∷ mov %rsi %rax
+  ∷ ret
   ∷ []
 
 -- fun : X86Fun λ x y → ((x + y - 100) * (x + y)) quot 2
@@ -109,10 +123,13 @@ runBBS (0 ∷ x ∷ n ∷ []) =
   -| print (iterate n (λ x → step x M) (pos x))
 runBBS (1 ∷ x ∷ n ∷ []) =
   print (iterate n (λ x → x * x rem M) (pos x))
+runBBS (2 ∷ x ∷ n ∷ []) =
+  do bbs ← jitRaw (blumblumRaw M)
+  -| print (bbs (pos x) (pos n))
 runBBS _ = usage
 
 main : IO ⊤
 main =
   do args ← getArgs
-  -- -| maybe usage runBBS (traverse parseNat args)
-  -| maybe usage (runRaw rawCode) (traverse parseNat args)
+  -| maybe usage runBBS (traverse parseNat args)
+  -- -| maybe usage (runRaw rawCode) (traverse parseNat args)
