@@ -8,6 +8,11 @@ NonZeroM : Maybe Int → Set
 NonZeroM nothing  = ⊤
 NonZeroM (just x) = NonZeroInt x
 
+record _∧_ (A B : Set) : Set where
+  instance constructor ∧I
+  field {{fst}} : A
+        {{snd}} : B
+
 data Reg : Set where
   rax rcx rdx rbx rsp rbp rsi rdi : Reg
 
@@ -36,6 +41,17 @@ data Exp P where
   imm : Int → Exp P
   _⊕_ _⊝_ _⊛_ : Exp P → Exp P → Exp P
   divE-by modE-by : (b : Exp P) {{nz : NonZeroE b}} → Exp P → Exp P
+
+infix 2 _⊑ᵉ_ _⊑ˡ_
+
+_⊑ᵉ_ : ∀ {P} → Exp P → Exp P → Set
+undef ⊑ᵉ _  = ⊤
+e     ⊑ᵉ e₁ = e ≡ e₁
+
+_⊑ˡ_ : ∀ {P} → List (Exp P) → List (Exp P) → Set
+[] ⊑ˡ _ = ⊤
+x ∷ xs ⊑ˡ [] = ⊥
+x ∷ xs ⊑ˡ y ∷ ys = (x ⊑ᵉ y) ∧ (xs ⊑ˡ ys)
 
 syntax divE-by y x = x divE y
 syntax modE-by y x = x modE y

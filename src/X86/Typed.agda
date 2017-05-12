@@ -30,6 +30,19 @@ record S P : Set where
 
 open S public
 
+record _⊑ˢ_ {P} (s₁ : S P) (s₂ : S P) : Set where
+  instance constructor mkLeq
+  field
+    [rax] : [rax] s₁ ⊑ᵉ [rax] s₂
+    [rcx] : [rcx] s₁ ⊑ᵉ [rcx] s₂
+    [rdx] : [rdx] s₁ ⊑ᵉ [rdx] s₂
+    [rbx] : [rbx] s₁ ⊑ᵉ [rbx] s₂
+    [rsp] : [rsp] s₁ ⊑ᵉ [rsp] s₂
+    [rbp] : [rbp] s₁ ⊑ᵉ [rbp] s₂
+    [rsi] : [rsi] s₁ ⊑ᵉ [rsi] s₂
+    [rdi] : [rdi] s₁ ⊑ᵉ [rdi] s₂
+    stack : stack s₁ ⊑ˡ stack s₂
+
 get : ∀ {P} → Val → S P → Exp P
 get %rax s = [rax] s
 get %rcx s = [rcx] s
