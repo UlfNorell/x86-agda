@@ -41,6 +41,16 @@ blumblumshubStep = mkFun
   ∷ ret
   ∷ []
 
+rawCode : Raw.X86Code
+rawCode
+  = Raw.mov %rdi %rcx
+  ∷ Raw.label
+  ∷ Raw.imul %rsi %rsi
+  ∷ Raw.loop 0
+  ∷ Raw.mov %rsi %rax
+  ∷ Raw.ret
+  ∷ []
+
 -- fun : X86Fun λ x y → ((x + y - 100) * (x + y)) quot 2
 -- fun : X86Fun λ x y → (x + y - 100) * (x + y)
 fun : X86Fun Pre λ x y → x quot y
@@ -52,18 +62,30 @@ finalState (mkFun {s = s} _) = s
 compileFun : ∀ {P f} → X86Fun P f → MachineCode
 compileFun (mkFun code) = compile code
 
-showMachineCode : ∀ {P s s₁} → X86Code P s s₁ → String
-showMachineCode = foldr (printf "%02x %s") "" ∘ compile
+showMachineCode : MachineCode → String
+showMachineCode = foldr (printf "%02x %s") ""
+
+showCode : ∀ {P s s₁} → X86Code P s s₁ → String
+showCode = showMachineCode ∘ compile
 
 jit : ∀ {P f} → X86Fun P f → IO (∀ x y {{_ : P x y}} → Int)
 jit fun =
   do f ← writeMachineCode (compileFun fun)
   -| pure (λ x y {{_}} → f x y)
 
+jitRaw : Raw.X86Code → IO (Int → Int → Int)
+jitRaw code = writeMachineCode (C.compile code)
+
 usage : IO ⊤
 usage =
   do prog ← getProgName
   -| putStrLn ("Usage: " & prog & " X Y")
+
+runRaw : Raw.X86Code → List Nat → IO ⊤
+runRaw code (x ∷ y ∷ []) =
+  do f ← jitRaw code
+  -| print (f (pos x) (pos y))
+runRaw _ _ = usage
 
 run : List Nat → IO ⊤
 run (x ∷ zero ∷ []) = putStrLn "Sorry, no division by 0."
@@ -92,4 +114,5 @@ runBBS _ = usage
 main : IO ⊤
 main =
   do args ← getArgs
-  -| maybe usage runBBS (traverse parseNat args)
+  -- -| maybe usage runBBS (traverse parseNat args)
+  -| maybe usage (runRaw rawCode) (traverse parseNat args)

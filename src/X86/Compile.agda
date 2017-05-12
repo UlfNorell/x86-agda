@@ -37,7 +37,7 @@ getLabel i =
   do s ← get
   -| case index (St.labels s) i of λ where
        nothing  → pure 1
-       (just a) → pure (fromNat (length (St.code s)) - fromNat a)
+       (just a) → pure (fromNat a - fromNat (length (St.code s)))
 
 regIx : Reg → Nat
 regIx rax = 0
@@ -48,6 +48,11 @@ regIx rsp = 4
 regIx rbp = 5
 regIx rsi = 6
 regIx rdi = 7
+
+-- Assumes -128 ≤ x < 128
+intToByte : Int → Nat
+intToByte (pos    n) = n
+intToByte (negsuc n) = 255 - n
 
 -- Little endian
 bytesNat : Nat → Nat → MachineCode
@@ -99,6 +104,13 @@ compileInstr (push (imm v)) = output $
 
 compileInstr (pop (reg r)) = output $
   0x58 + regIx r ∷ []
+
+compileInstr label = setLabel
+
+compileInstr (loop l) =
+  do output (0xe2 ∷ [])
+  ~| offs ← getLabel l
+  -| output (intToByte offs ∷ [])
 
 compile : X86Code → MachineCode
 compile code = runC (traverse compileInstr code)
