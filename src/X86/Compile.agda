@@ -110,7 +110,7 @@ compileInstr label = setLabel
 compileInstr (loop l) =
   do output (0xe2 ∷ [])
   ~| offs ← getLabel l
-  -| output (intToByte offs ∷ [])
+  -| output (intToByte (offs - 1) ∷ []) -- -1 to account for addr byte
 
 compile : X86Code → MachineCode
 compile code = runC (traverse compileInstr code)
