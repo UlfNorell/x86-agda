@@ -5,7 +5,7 @@ open import Prelude
 
 data Path {a b} {I : Set a} (R : I → I → Set b) (i : I) : I → Set (a ⊔ b) where
   []  : Path R i i
-  _∷_ : ∀ {j k} → R i j → Path R j k → Path R i k
+  _∷_ : ∀ ..{j k} → R i j → Path R j k → Path R i k
 
 _==>_ : ∀ {a b c} {I : Set a} → (I → I → Set b) → (I → I → Set c) → Set (a ⊔ b ⊔ c)
 R ==> S = ∀ {i j} → R i j → S i j

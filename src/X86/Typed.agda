@@ -15,9 +15,6 @@ data IsJust {A : Set} : Maybe A → Set where
 fromJust : ∀ {A} {m : Maybe A} → IsJust m → A
 fromJust (just x) = x
 
-data PosInt : Int → Set where
-  instance mkPosInt : ∀ {n} → PosInt (pos (suc n))
-
 _≃_ : ∀ {P} → Exp P → Exp P → Set
 _≃_ {P} e e₁ = ∀ φ {{_ : P φ}} → eval φ e ≡ eval φ e₁
 
@@ -55,17 +52,30 @@ record _⊑_ {P} (s₁ : S P) (s₂ : S P) : Set where
 
 {-# TERMINATING #-} -- ugh
 substS : ∀ {P} → Label → Exp P → S P → S P
-[rax] (substS i e s) = subst i e ([rax] s)
-[rdx] (substS i e s) = subst i e ([rcx] s)
-[rcx] (substS i e s) = subst i e ([rdx] s)
-[rbx] (substS i e s) = subst i e ([rbx] s)
-[rsp] (substS i e s) = subst i e ([rsp] s)
-[rbp] (substS i e s) = subst i e ([rbp] s)
-[rsi] (substS i e s) = subst i e ([rsi] s)
-[rdi] (substS i e s) = subst i e ([rdi] s)
-stack (substS i e s) = map (subst i e) (stack s)
-labels (substS i e s) = map (substS i e) (labels s)
-isRet (substS i e s) = isRet s
+substS i e s =
+  record s
+    { [rax]  = subst i e ([rax] s)
+    ; [rcx]  = subst i e ([rcx] s)
+    ; [rdx]  = subst i e ([rdx] s)
+    ; [rbx]  = subst i e ([rbx] s)
+    ; [rsp]  = subst i e ([rsp] s)
+    ; [rbp]  = subst i e ([rbp] s)
+    ; [rsi]  = subst i e ([rsi] s)
+    ; [rdi]  = subst i e ([rdi] s)
+    ; stack  = map (subst i e) (stack s)
+    ; labels = [] -- map (substS i e) (labels s)
+    ; isRet  = isRet s }
+-- [rax] (substS i e s) = subst i e ([rax] s)
+-- [rcx] (substS i e s) = subst i e ([rcx] s)
+-- [rdx] (substS i e s) = subst i e ([rdx] s)
+-- [rbx] (substS i e s) = subst i e ([rbx] s)
+-- [rsp] (substS i e s) = subst i e ([rsp] s)
+-- [rbp] (substS i e s) = subst i e ([rbp] s)
+-- [rsi] (substS i e s) = subst i e ([rsi] s)
+-- [rdi] (substS i e s) = subst i e ([rdi] s)
+-- stack (substS i e s) = map (subst i e) (stack s)
+-- labels (substS i e s) = map (substS i e) (labels s)
+-- isRet (substS i e s) = isRet s
 
 get : ∀ {P} → Val → S P → Exp P
 get %rax s = [rax] s
@@ -174,22 +184,26 @@ LabelObligation e =
   Obligation "Positive loop counter" ("Show that " & show e & " > 0.")
              {ExpP PosInt e}
 
-label-next : ∀ {P} (wk : S P → S P) → S P → S P
-label-next wk s = record s₁ { labels = labels s₁ ++ s₁ ∷ [] }
+getLabel : ∀ {P} → S P → Label
+getLabel s = length (labels s)
+
+label-next : ∀ {P} (l : Label) (wk : Label → S P → S P) → S P → S P
+label-next l wk s = record s₁ { labels = labels s₁ ++ s₁ ∷ [] }
   where
-    l  = length (labels s)
-    s₁ = set %rcx (var l) (wk s)
+    s₁ = set %rcx (get %rcx s - var l) (wk l s)
 
 LoopObligation : ∀ {P} → Label → S P → Set
 LoopObligation l s =
   case index (labels s) l of λ where
     nothing → Error "Loop" ("Label " & show l & " is not defined.")
-    (just s₁) →
+    (just s₀) →
       Obligation "Loop" "Show that the loop body preserves the invariant."
-                 {s₁ ⊑ s} -- TODO: better message
+                 {substS l (var l ⊕ 1) s₀ ⊑ set %rcx (get %rcx s₀ - 1) s} -- TODO: better message
 
 loop-next : ∀ {P} → (l : Nat) (s : S P) {{_ : LoopObligation l s}} → S P
-loop-next l s = set %rcx 0 (substS l (imm 1) s)
+loop-next l s with index (labels s) l
+loop-next l s {{}} | nothing
+loop-next l s      | just s₀ = set %rcx 0 (substS l (get %rcx s₀ + var l) s₀)
 
 Precondition : Set₁
 Precondition = Int → Int → Set
@@ -234,14 +248,15 @@ data Instr (P : Env → Set) (s : S P) : S P → Set where
          {{okrsp  : PopObligation (get %rsp s) (stack s)}} →
          Instr P s (pop-next dst s)
 
-  label : {{_ : LabelObligation (get %rcx s)}} →
-          (wk : S P → S P)
-          {{_ : wk s ⊑ s}} →
-          Instr P s (label-next wk s)
+  label : ..{{_ : LabelObligation (get %rcx s)}} →
+          (wk : Label → S P → S P)
+          (let l = getLabel s)
+          ..{{okwk : substS l 0 (wk l s) ⊑ s}} →
+          Instr P s (label-next l wk s)
 
   loop : (l : Label)
          {{notret : isRet s ≡ false}}
-         {{okloop : LoopObligation l s}} →
+         ..{{okloop : LoopObligation l s}} →
          Instr P s (loop-next l s)
 
 X86Code : (P : Env → Set) → S P → S P → Set

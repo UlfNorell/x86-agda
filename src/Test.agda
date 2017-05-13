@@ -39,14 +39,14 @@ fun₁ = mkFun code₁
 loop-test : X86Code (EnvPrecondition λ _ y → PosInt y) initS _
 loop-test
   = mov %rsi %rcx
-  ∷ label (set %rdi undef)
+  ∷ label (λ l → set %rdi (%rdi + var l))
   ∷ add 1 %rdi
   ∷ loop 0
   ∷ mov %rdi %rax
   ∷ ret
   ∷ []
 
-loop-test-fun : X86Fun! (λ _ y → PosInt y)
+loop-test-fun : X86Fun (λ _ y → PosInt y) (λ x y → x + y)
 loop-test-fun = mkFun loop-test
 
 blumblumshubStep : X86Fun Pre λ x M → x * x rem M
@@ -76,7 +76,7 @@ blumblumLoopTyped M
   = mov %rsi %rcx
   ∷ mov %rdi %rax
   ∷ mov (imm M) %rdi
-  ∷ label (set %rax undef ∘ set %rdx undef)
+  ∷ label (λ _ → set %rax undef ∘ set %rdx undef)
   ∷ imul %rax %rax
   ∷ idiv %rdi
   ∷ mov %rdx %rax
@@ -84,8 +84,27 @@ blumblumLoopTyped M
   ∷ ret
   ∷ []
 
-blumblumTyped : (M : Int) {{_ : NonZeroInt M}} → X86Fun! (λ _ y → PosInt y)
+blumblumLoopTyped' : (M : Int) {{_ : NonZeroInt M}} → X86Code (EnvPrecondition λ _ y → PosInt y) initS _
+blumblumLoopTyped' M
+  = mov %rsi %rcx
+  ∷ mov %rdi %rax
+  ∷ mov (imm M) %rdi
+  ∷ label (λ l → set %rax (loopInv l (λ x → x * x modE (imm M)) %rdi) ∘ set %rdx undef)
+  ∷ imul %rax %rax
+  ∷ idiv %rdi
+  ∷ mov %rdx %rax
+  ∷ loop 0
+  ∷ ret
+  ∷ []
+
+blumblumTyped : (M : Int) {{_ : NonZeroInt M}} →
+                 X86Fun! (λ _ y → PosInt y)
 blumblumTyped M = mkFun (blumblumLoopTyped M)
+
+blumblumTyped' : (M : Int) {{_ : NonZeroInt M}} →
+                 X86Fun (λ _ y → PosInt y)
+                        (λ x y → iterInt y (λ z → z * z rem M) x)
+blumblumTyped' M = mkFun (blumblumLoopTyped' M)
 
 rawCode : Raw.X86Code
 rawCode
@@ -167,7 +186,7 @@ runBBS (2 ∷ x ∷ n ∷ []) =
   do bbs ← jitRaw (blumblumRaw M)
   -| print (bbs (pos x) (pos n))
 runBBS (3 ∷ x ∷ suc n ∷ []) =
-  do bbs ← jit! (blumblumTyped M)
+  do bbs ← jit (blumblumTyped' M)
   -| print (bbs (pos x) (pos (suc n)))
 runBBS _ = usage
 

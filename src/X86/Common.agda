@@ -5,6 +5,10 @@ open import Prelude
 open import Structure.Smashed
 open import Tactic.Deriving.Eq
 
+iterInt : {A : Set} → Int → (A → A) → A → A
+iterInt (pos (suc n)) f z = f (iterInt (pos n) f z)
+iterInt _             f z = z
+
 WhenJust : {A : Set} → (P : A → Set) → Maybe A → Set
 WhenJust _ nothing = ⊥
 WhenJust P (just x) = P x
@@ -12,6 +16,9 @@ WhenJust P (just x) = P x
 SmashWhenJust : ∀ {A} {P : A → Set} → (∀ {x} → Smashed (P x)) → ∀ {x} → Smashed (WhenJust P x)
 SmashWhenJust smP {nothing} = it
 SmashWhenJust smP {just x}  = smP
+
+data PosInt : Int → Set where
+  instance mkPosInt : ∀ {n} → PosInt (pos (suc n))
 
 record _∧_ (A B : Set) : Set where
   instance constructor ∧I
@@ -34,11 +41,17 @@ unquoteDecl EqDst = deriveEq EqDst (quote Dst)
 
 Env = Reg → Int
 
+_[_:=_] : (Nat → Maybe Int) → Nat → Maybe Int → Nat → Maybe Int
+(ρ [ x := v ]) y = ifYes x == y then v else ρ y
+
 data Exp (P : Env → Set) : Set
 eval : ∀ {P} (φ : Env) {{_ : P φ}} → Exp P → Maybe Int
 
 ExpP : ∀ {P} → (Int → Set) → Exp P → Set
 ExpP {P} Q e = ∀ {φ} {{pφ : P φ}} → WhenJust Q (eval φ e)
+
+infixl 6 _⊕_ _⊝_
+infixl 7 _⊛_ divE-by modE-by
 
 data Exp P where
   var : Nat → Exp P
@@ -47,26 +60,19 @@ data Exp P where
   imm : Int → Exp P
   _⊕_ _⊝_ _⊛_ : Exp P → Exp P → Exp P
   divE-by modE-by : (b : Exp P) {{nz : ExpP NonZeroInt b}} → Exp P → Exp P
-
-infix 2 _⊑ᵉ_ _⊑ˡ_
-
-_⊑ᵉ_ : ∀ {P} → Exp P → Exp P → Set
-undef ⊑ᵉ _  = ⊤
-e     ⊑ᵉ e₁ = e ≡ e₁
-
-_⊑ˡ_ : ∀ {P} → List (Exp P) → List (Exp P) → Set
-[] ⊑ˡ _ = ⊤
-x ∷ xs ⊑ˡ [] = ⊥
-x ∷ xs ⊑ˡ y ∷ ys = (x ⊑ᵉ y) ∧ (xs ⊑ˡ ys)
+  iterE : (n : Exp P) (x : Nat) (f z : Exp P) → Exp P
 
 syntax divE-by y x = x divE y
 syntax modE-by y x = x modE y
 
+
 evalNZ : ∀ {P} → ((b : Int) {{_ : NonZeroInt b}} → Int → Int) →
-         (φ : Env) {{_ : P φ}} → (b : Exp P) {{_ : ExpP NonZeroInt b}} → Exp P → Maybe Int
+           (φ : Env) {{_ : P φ}} → (b : Exp P) {{_ : ExpP NonZeroInt b}} → Exp P → Maybe Int
 evalNZ f φ e₁ {{nz}} e with eval φ e₁ | mkInstance (nz {φ})
 ... | nothing | _ = nothing
 ... | just v  | _ = (| (f v) (eval φ e) |)
+
+evalFun : ∀ {P} (φ : Env) {{_ : P φ}} → Nat → Exp P → Maybe (Int → Int)
 
 eval φ (var _) = nothing
 eval φ undef   = nothing
@@ -77,6 +83,59 @@ eval φ (e ⊝ e₁) = (| eval φ e - eval φ e₁ |)
 eval φ (e ⊛ e₁) = (| eval φ e * eval φ e₁ |)
 eval φ (e divE e₁) = evalNZ quotInt-by φ e₁ e
 eval φ (e modE e₁) = evalNZ remInt-by  φ e₁ e
+eval φ (iterE n x f z) = (| iterInt (eval φ n) (evalFun φ x f) (eval φ z) |)
+
+evalFunNZ : ∀ {P} → ((b : Int) {{_ : NonZeroInt b}} → Int → Int) →
+              (φ : Env) {{_ : P φ}} → Nat → (b : Exp P) {{_ : ExpP NonZeroInt b}} →
+              Exp P → Maybe (Int → Int)
+
+postulate
+  evalFunLem : ∀ {P Q} (a : Exp P) {{_ : ExpP Q a}} {φ} {{_ : P φ}} x →
+                 ∀ n → maybe ⊤ (λ f → Q (f n)) (evalFun φ x a)
+
+evalFunNZ h φ {{pφ}} x f {{nz}} g with evalFun φ x f | evalFunLem {Q = NonZeroInt} f {φ} {{pφ}} x
+... | nothing | _   = nothing
+... | just f′ | nzf = (| (λ g′ z → h (f′ z) {{nzf z}} (g′ z)) (evalFun φ x g) |)
+
+evalFun φ x (var y) = ifYes x == y then just id else nothing
+evalFun φ x undef = nothing
+evalFun φ x (reg r) = just λ _ → φ r
+evalFun φ x (imm n) = just λ _ → n
+evalFun φ x (f ⊕ f₁) = (| (λ f g n → f n + g n) (evalFun φ x f) (evalFun φ x f₁) |)
+evalFun φ x (f ⊝ f₁) = (| (λ f g n → f n - g n) (evalFun φ x f) (evalFun φ x f₁) |)
+evalFun φ x (f ⊛ f₁) = (| (λ f g n → f n * g n) (evalFun φ x f) (evalFun φ x f₁) |)
+evalFun φ x (divE-by f f₁) = evalFunNZ quotInt-by φ x f f₁
+evalFun φ x (modE-by f f₁) = evalFunNZ remInt-by φ x f f₁
+evalFun φ x (iterE n y f z) = nothing -- TODO: nested loops
+-- (| (λ n f z i → iterInt (n i) (f i) (z i)) (evalFun φ x n) nothing (evalFun φ x z) |)
+
+-- evalFunLem = {!!} -- TODO
+
+data _===_ {P} : Exp P → Exp P → Set where
+  instance
+    imm : ∀ {x} → imm x === imm x
+    reg : ∀ {r} → reg r === reg r
+    var : ∀ {x} → var x === var x
+    _⊕_ : ∀ {a b c d} → a === c → b === d → (a ⊕ b) === (c ⊕ d)
+    _⊝_ : ∀ {a b c d} → a === c → b === d → (a ⊝ b) === (c ⊝ d)
+    _⊛_ : ∀ {a b c d} → a === c → b === d → (a ⊛ b) === (c ⊛ d)
+    divE-by : ∀ {a b c d} {{p : ExpP NonZeroInt a}} {{q : ExpP NonZeroInt c}} →
+                a === c → b === d → (divE-by a b) === (divE-by c d)
+    modE-by : ∀ {a b c d} {{p : ExpP NonZeroInt a}} {{q : ExpP NonZeroInt c}} →
+                a === c → b === d → (modE-by a b) === (modE-by c d)
+    iterE : ∀ {n n₁ x f f₁ z z₁} → n === n₁ → f === f₁ → z === z₁ →
+              iterE n x f z === iterE n₁ x f₁ z₁
+
+infix 2 _⊑ᵉ_ _⊑ˡ_
+
+_⊑ᵉ_ : ∀ {P} → Exp P → Exp P → Set
+undef ⊑ᵉ _  = ⊤
+e     ⊑ᵉ e₁ = e === e₁
+
+_⊑ˡ_ : ∀ {P} → List (Exp P) → List (Exp P) → Set
+[] ⊑ˡ _ = ⊤
+x ∷ xs ⊑ˡ [] = ⊥
+x ∷ xs ⊑ˡ y ∷ ys = (x ⊑ᵉ y) ∧ (xs ⊑ˡ ys)
 
 nogo-l : (_∙_ : Int → Int → Int) (a b : Maybe Int) → a ≡ nothing → (| a ∙ b |) ≡ nothing
 nogo-l _∙_ a b refl = refl
@@ -88,53 +147,6 @@ nogo-r _∙_ (just _) b refl = refl
 nz-cong : {A : Set} {P : A → Set} {{_ : ∀ {x} → Smashed (P x)}} (f : ∀ (x : A) {{_ : P x}} → A → A) →
           ∀ a b c d {{_ : P a}} {{_ : P c}} → a ≡ c → b ≡ d → f a b ≡ f c d
 nz-cong f a b c d refl refl = (λ nz → f a {{nz}} b) $≡ smashed
-
-subst : ∀ {P} → Nat → Exp P → Exp P → Exp P
-
--- data SubstLem {P} Q i (u v : Exp P) : Set where
---   notFree : subst i u v ≡ v → SubstLem i u v
---   free    : (∀ {φ} {{pφ : P φ}} → eval φ v ≡ nothing) → SubstLem i u v
-
--- substLem : ∀ {P} i (u v : Exp P) → SubstLem i u v
-
-postulate -- TODO
-  substCor : ∀ {P Q} i (u v : Exp P) {{pv : ExpP Q v}} → ExpP Q (subst i u v)
--- substCor i u v {{pv}} {φ} with substLem i u v | pv {φ} {{it}}
--- ... | notFree nop | _   = {!!}
--- ... | free nogo   | pvφ rewrite nogo {φ} {{it}} = ⊥-elim pvφ
-
-subst i u (var j) = ifYes i == j then u else var j
-subst i u undef = undef
-subst i u (reg r) = reg r
-subst i u (imm x) = imm x
-subst i u (v ⊕ v₁) = subst i u v ⊕ subst i u v₁
-subst i u (v ⊝ v₁) = subst i u v ⊝ subst i u v₁
-subst i u (v ⊛ v₁) = subst i u v ⊛ subst i u v₁
-subst i u (divE-by v v₁) = divE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
-subst i u (modE-by v v₁) = modE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
-
--- substLem i u (var j) with i == j | notFree {i = i} {u} {var j}
--- ... | yes _ | _  = free refl
--- ... | no  _ | nf = nf refl
--- substLem i u undef   = notFree refl
--- substLem i u (reg r) = notFree refl
--- substLem i u (imm x) = notFree refl
--- substLem i u (v ⊕ v₁) with substLem i u v | substLem i u v₁
--- ... | notFree eqv | notFree eqv₁ = notFree (_⊕_ $≡ eqv *≡ eqv₁)
--- ... | free p | _ = free (λ {φ} → nogo-l _+Z_ (eval φ v) (eval φ v₁) (p {φ}))
--- ... | _ | free p = free (λ {φ} → nogo-r _+Z_ (eval φ v) (eval φ v₁) (p {φ}))
--- substLem i u (v ⊝ v₁) with substLem i u v | substLem i u v₁
--- ... | notFree eqv | notFree eqv₁ = notFree (_⊝_ $≡ eqv *≡ eqv₁)
--- ... | free p | _ = free (λ {φ} → nogo-l _-Z_ (eval φ v) (eval φ v₁) (p {φ}))
--- ... | _ | free p = free (λ {φ} → nogo-r _-Z_ (eval φ v) (eval φ v₁) (p {φ}))
--- substLem i u (v ⊛ v₁) with substLem i u v | substLem i u v₁
--- ... | notFree eqv | notFree eqv₁ = notFree (_⊛_ $≡ eqv *≡ eqv₁)
--- ... | free p | _ = free (λ {φ} → nogo-l _*Z_ (eval φ v) (eval φ v₁) (p {φ}))
--- ... | _ | free p = free (λ {φ} → nogo-r _*Z_ (eval φ v) (eval φ v₁) (p {φ}))
--- substLem i u (divE-by v {{nzv}} v₁) with substLem i u v | substLem i u v₁
--- ... | notFree eqv | notFree eqv₁ = notFree (nz-cong {{{!!}}} divE-by (subst i u v) (subst i u v₁) v v₁ eqv eqv₁)
--- ... | _ | _ = {!!}
--- substLem i u (modE-by v v₁) = {!!}
 
 Polynomial = List Int
 NF = Maybe Polynomial
@@ -177,6 +189,7 @@ norm φ (e ⊝ e₁) = (| norm φ e -n norm φ e₁ |)
 norm φ (e ⊛ e₁) = (| norm φ e *n norm φ e₁ |)
 norm φ (e divE e₁) = nothing    -- this is used for register preservation:
 norm φ (e modE e₁) = nothing  -- we don't allow div and mod for that
+norm φ (iterE _ _ _ _) = nothing
 
 pattern %rax = reg rax
 pattern %rcx = reg rcx
@@ -186,6 +199,12 @@ pattern %rsp = reg rsp
 pattern %rbp = reg rbp
 pattern %rsi = reg rsi
 pattern %rdi = reg rdi
+
+sameExp : ∀ {P} (a b : Exp P) → Maybe (a ≡ b)
+sameExp (var x) (var y) = (λ e → var $≡ e) <$> maybeYes (x == y)
+sameExp (imm x) (imm y) = (λ e → imm $≡ e) <$> maybeYes (x == y)
+sameExp (reg r) (reg s) = (λ e → reg $≡ e) <$> maybeYes (r == s)
+sameExp _ _ = nothing
 
 instance
   NumVal : Number Val
@@ -208,8 +227,11 @@ instance
   zro {{SemiringExp}} = 0
   one {{SemiringExp}} = 1
   _+_ {{SemiringExp}} a (imm (pos 0)) = a
+  _+_ {{SemiringExp}} a (b ⊕ c) = (a + b) ⊕ c
+  _+_ {{SemiringExp}} a (b ⊝ c) = (a + b) ⊝ c
   _+_ {{SemiringExp}} (imm (pos 0)) b = b
   _+_ {{SemiringExp}} (a ⊝ imm b) (imm c) = a + imm (c - b)
+  _+_ {{SemiringExp}} (a ⊝ b) b′ = maybe (a ⊝ b ⊕ b′) (λ _ → a) (sameExp b b′)
   _+_ {{SemiringExp}} a b = a ⊕ b
   _*_ {{SemiringExp}} (imm (pos 0)) b = imm (pos 0)
   _*_ {{SemiringExp}} a (imm (pos 0)) = imm (pos 0)
@@ -218,6 +240,9 @@ instance
   SubExp : ∀ {P} → Subtractive (Exp P)
   _-_    {{SubExp}} (a ⊕ imm b) (imm c) = a + imm (b - c)
   _-_    {{SubExp}} (a ⊝ imm b) (imm c) = a - imm (b + c)
+  _-_    {{SubExp}} a (b ⊕ c) = (a - b) ⊝ c
+  _-_    {{SubExp}} a (b ⊝ c) = (a - b) ⊕ c
+  _-_    {{SubExp}} (a ⊕ b) b′ = maybe (a ⊕ b ⊝ b′) (λ _ → a) (sameExp b b′)
   _-_    {{SubExp}} a b = a ⊝ b
   negate {{SubExp}} a   = 0 - a
 
@@ -241,3 +266,66 @@ instance
   showsPrec {{ShowExp}} p (e ⊛ e₁) = showParen (p >? 7) (showsPrec 7 e ∘ showString " * " ∘ showsPrec 8 e₁)
   showsPrec {{ShowExp}} p (e divE e₁) = showParen (p >? 7) (showsPrec 7 e ∘ showString " / " ∘ showsPrec 8 e₁)
   showsPrec {{ShowExp}} p (e modE e₁) = showParen (p >? 7) (showsPrec 7 e ∘ showString " % " ∘ showsPrec 8 e₁)
+  showsPrec {{ShowExp}} p (iterE n x f z) =
+    showParen (p >? 9) (showString "iterE " ∘ showsPrec 10 n ∘
+                        showString " (λ x" ∘ shows x ∘ showString " → " ∘ showsPrec 0 f ∘ showString " )" ∘
+                        showsPrec 10 z)
+
+{-# TERMINATING #-}
+subst : ∀ {P} → Nat → Exp P → Exp P → Exp P
+
+iterE' : ∀ {P} → Exp P → Nat → Exp P → Exp P → Exp P
+iterE' (imm (pos 0)) _ _ z = z
+iterE' (a ⊕ imm (pos 1)) x f z = subst x (iterE a x f z) f
+iterE' n x f z = iterE n x f z
+
+-- data SubstLem {P} Q i (u v : Exp P) : Set where
+--   notFree : subst i u v ≡ v → SubstLem i u v
+--   free    : (∀ {φ} {{pφ : P φ}} → eval φ v ≡ nothing) → SubstLem i u v
+
+-- substLem : ∀ {P} i (u v : Exp P) → SubstLem i u v
+
+postulate -- TODO
+  substCor : ∀ {P Q} i (u v : Exp P) {{pv : ExpP Q v}} → ExpP Q (subst i u v)
+-- substCor i u v {{pv}} {φ} with substLem i u v | pv {φ} {{it}}
+-- ... | notFree nop | _   = {!!}
+-- ... | free nogo   | pvφ rewrite nogo {φ} {{it}} = ⊥-elim pvφ
+
+subst i u (var j) = ifYes i == j then u else var j
+subst i u undef = undef
+subst i u (reg r) = reg r
+subst i u (imm x) = imm x
+subst i u (v ⊕ v₁) = subst i u v + subst i u v₁
+subst i u (v ⊝ v₁) = subst i u v - subst i u v₁
+subst i u (v ⊛ v₁) = subst i u v * subst i u v₁
+subst i u (divE-by v v₁) = divE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
+subst i u (modE-by v v₁) = modE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
+subst i u (iterE n x f b) =
+  -- TODO: capture avoidance!
+  iterE' (subst i u n) x (subst i u f) (subst i u b)
+
+-- substLem i u (var j) with i == j | notFree {i = i} {u} {var j}
+-- ... | yes _ | _  = free refl
+-- ... | no  _ | nf = nf refl
+-- substLem i u undef   = notFree refl
+-- substLem i u (reg r) = notFree refl
+-- substLem i u (imm x) = notFree refl
+-- substLem i u (v ⊕ v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (_⊕_ $≡ eqv *≡ eqv₁)
+-- ... | free p | _ = free (λ {φ} → nogo-l _+Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- ... | _ | free p = free (λ {φ} → nogo-r _+Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- substLem i u (v ⊝ v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (_⊝_ $≡ eqv *≡ eqv₁)
+-- ... | free p | _ = free (λ {φ} → nogo-l _-Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- ... | _ | free p = free (λ {φ} → nogo-r _-Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- substLem i u (v ⊛ v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (_⊛_ $≡ eqv *≡ eqv₁)
+-- ... | free p | _ = free (λ {φ} → nogo-l _*Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- ... | _ | free p = free (λ {φ} → nogo-r _*Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- substLem i u (divE-by v {{nzv}} v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (nz-cong {{{!!}}} divE-by (subst i u v) (subst i u v₁) v v₁ eqv eqv₁)
+-- ... | _ | _ = {!!}
+-- substLem i u (modE-by v v₁) = {!!}
+
+loopInv : ∀ {P} → Nat → (Exp P → Exp P) → Exp P → Exp P
+loopInv l f z = iterE (var l) (suc l) (f (var (suc l))) z
