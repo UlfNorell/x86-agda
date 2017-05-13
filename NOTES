@@ -31,3 +31,6 @@
   - Be explicit about what's the trusted code
   - How to present implementation? Be nice to do some incremental typing.
 
+  - Phase 1: Straighline code (no div)
+  - Phase 2: Custom preconditions: x quot y
+  - Phase 3: Loops
