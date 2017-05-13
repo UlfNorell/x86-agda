@@ -33,18 +33,26 @@ code₁
   ∷ ret
   ∷ []
 
+fun₁ : X86Fun (λ _ _ → ⊤) λ x y → (x + y - 100) * (x + y)
+fun₁ = mkFun code₁
+
 loop-test : X86Code (EnvPrecondition λ _ y → PosInt y) initS _
 loop-test
   = mov %rsi %rcx
-  ∷ label (set %rdi undef)
+  ∷ label (set %rdi undef ∘ set %rsi undef)
   ∷ add 1 %rdi
+  ∷ mov %rcx %rsi
   ∷ loop 0
   ∷ mov %rdi %rax
+  ∷ mov %rsi %rax
   ∷ ret
   ∷ []
 
-fun₁ : X86Fun (λ _ _ → ⊤) λ x y → (x + y - 100) * (x + y)
-fun₁ = mkFun code₁
+loop-test-fun : X86Fun! (λ _ y → PosInt y)
+loop-test-fun = mkFun loop-test
+
+loop-test-fun₁ : X86Fun (λ _ y → PosInt y) (λ _ _ → 1)
+loop-test-fun₁ = mkFun loop-test
 
 blumblumshubStep : X86Fun Pre λ x M → x * x rem M
 blumblumshubStep = mkFun

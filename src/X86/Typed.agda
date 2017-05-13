@@ -53,6 +53,20 @@ record _⊑_ {P} (s₁ : S P) (s₂ : S P) : Set where
     [rdi]  : [rdi] s₁ ⊑ᵉ [rdi] s₂
     stack  : stack s₁ ⊑ˡ stack s₂
 
+{-# TERMINATING #-} -- ugh
+substS : ∀ {P} → Label → Exp P → S P → S P
+[rax] (substS i e s) = subst i e ([rax] s)
+[rdx] (substS i e s) = subst i e ([rcx] s)
+[rcx] (substS i e s) = subst i e ([rdx] s)
+[rbx] (substS i e s) = subst i e ([rbx] s)
+[rsp] (substS i e s) = subst i e ([rsp] s)
+[rbp] (substS i e s) = subst i e ([rbp] s)
+[rsi] (substS i e s) = subst i e ([rsi] s)
+[rdi] (substS i e s) = subst i e ([rdi] s)
+stack (substS i e s) = map (subst i e) (stack s)
+labels (substS i e s) = map (substS i e) (labels s)
+isRet (substS i e s) = isRet s
+
 get : ∀ {P} → Val → S P → Exp P
 get %rax s = [rax] s
 get %rcx s = [rcx] s
@@ -175,7 +189,7 @@ LoopObligation l s =
                  {s₁ ⊑ s} -- TODO: better message
 
 loop-next : ∀ {P} → (l : Nat) (s : S P) {{_ : LoopObligation l s}} → S P
-loop-next l s = set %rcx 0 s
+loop-next l s = set %rcx 0 (substS l (imm 1) s)
 
 Precondition : Set₁
 Precondition = Int → Int → Set

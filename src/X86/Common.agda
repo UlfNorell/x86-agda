@@ -2,11 +2,16 @@
 module X86.Common where
 
 open import Prelude
+open import Structure.Smashed
 open import Tactic.Deriving.Eq
 
 WhenJust : {A : Set} → (P : A → Set) → Maybe A → Set
 WhenJust _ nothing = ⊥
 WhenJust P (just x) = P x
+
+SmashWhenJust : ∀ {A} {P : A → Set} → (∀ {x} → Smashed (P x)) → ∀ {x} → Smashed (WhenJust P x)
+SmashWhenJust smP {nothing} = it
+SmashWhenJust smP {just x}  = smP
 
 record _∧_ (A B : Set) : Set where
   instance constructor ∧I
@@ -72,6 +77,64 @@ eval φ (e ⊝ e₁) = (| eval φ e - eval φ e₁ |)
 eval φ (e ⊛ e₁) = (| eval φ e * eval φ e₁ |)
 eval φ (e divE e₁) = evalNZ quotInt-by φ e₁ e
 eval φ (e modE e₁) = evalNZ remInt-by  φ e₁ e
+
+nogo-l : (_∙_ : Int → Int → Int) (a b : Maybe Int) → a ≡ nothing → (| a ∙ b |) ≡ nothing
+nogo-l _∙_ a b refl = refl
+
+nogo-r : (_∙_ : Int → Int → Int) (a b : Maybe Int) → b ≡ nothing → (| a ∙ b |) ≡ nothing
+nogo-r _∙_ nothing  _ _    = refl
+nogo-r _∙_ (just _) b refl = refl
+
+nz-cong : {A : Set} {P : A → Set} {{_ : ∀ {x} → Smashed (P x)}} (f : ∀ (x : A) {{_ : P x}} → A → A) →
+          ∀ a b c d {{_ : P a}} {{_ : P c}} → a ≡ c → b ≡ d → f a b ≡ f c d
+nz-cong f a b c d refl refl = (λ nz → f a {{nz}} b) $≡ smashed
+
+subst : ∀ {P} → Nat → Exp P → Exp P → Exp P
+
+-- data SubstLem {P} Q i (u v : Exp P) : Set where
+--   notFree : subst i u v ≡ v → SubstLem i u v
+--   free    : (∀ {φ} {{pφ : P φ}} → eval φ v ≡ nothing) → SubstLem i u v
+
+-- substLem : ∀ {P} i (u v : Exp P) → SubstLem i u v
+
+postulate -- TODO
+  substCor : ∀ {P Q} i (u v : Exp P) {{pv : ExpP Q v}} → ExpP Q (subst i u v)
+-- substCor i u v {{pv}} {φ} with substLem i u v | pv {φ} {{it}}
+-- ... | notFree nop | _   = {!!}
+-- ... | free nogo   | pvφ rewrite nogo {φ} {{it}} = ⊥-elim pvφ
+
+subst i u (var j) = ifYes i == j then u else var j
+subst i u undef = undef
+subst i u (reg r) = reg r
+subst i u (imm x) = imm x
+subst i u (v ⊕ v₁) = subst i u v ⊕ subst i u v₁
+subst i u (v ⊝ v₁) = subst i u v ⊝ subst i u v₁
+subst i u (v ⊛ v₁) = subst i u v ⊛ subst i u v₁
+subst i u (divE-by v v₁) = divE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
+subst i u (modE-by v v₁) = modE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
+
+-- substLem i u (var j) with i == j | notFree {i = i} {u} {var j}
+-- ... | yes _ | _  = free refl
+-- ... | no  _ | nf = nf refl
+-- substLem i u undef   = notFree refl
+-- substLem i u (reg r) = notFree refl
+-- substLem i u (imm x) = notFree refl
+-- substLem i u (v ⊕ v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (_⊕_ $≡ eqv *≡ eqv₁)
+-- ... | free p | _ = free (λ {φ} → nogo-l _+Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- ... | _ | free p = free (λ {φ} → nogo-r _+Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- substLem i u (v ⊝ v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (_⊝_ $≡ eqv *≡ eqv₁)
+-- ... | free p | _ = free (λ {φ} → nogo-l _-Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- ... | _ | free p = free (λ {φ} → nogo-r _-Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- substLem i u (v ⊛ v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (_⊛_ $≡ eqv *≡ eqv₁)
+-- ... | free p | _ = free (λ {φ} → nogo-l _*Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- ... | _ | free p = free (λ {φ} → nogo-r _*Z_ (eval φ v) (eval φ v₁) (p {φ}))
+-- substLem i u (divE-by v {{nzv}} v₁) with substLem i u v | substLem i u v₁
+-- ... | notFree eqv | notFree eqv₁ = notFree (nz-cong {{{!!}}} divE-by (subst i u v) (subst i u v₁) v v₁ eqv eqv₁)
+-- ... | _ | _ = {!!}
+-- substLem i u (modE-by v v₁) = {!!}
 
 Polynomial = List Int
 NF = Maybe Polynomial
