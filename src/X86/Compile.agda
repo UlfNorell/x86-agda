@@ -30,13 +30,13 @@ output : MachineCode → C ⊤
 output code = _ <$ modify λ s → record s { code = St.code s ++ code }
 
 setLabel : C ⊤
-setLabel = _ <$ modify λ s → record s { labels = length (St.code s) ∷ St.labels s }
+setLabel = _ <$ modify λ s → record s { labels = St.labels s ++ length (St.code s) ∷ [] }
 
 getLabel : Nat → C Int
 getLabel i =
   do s ← get
   -| case index (St.labels s) i of λ where
-       nothing  → pure 1
+       nothing  → pure 1 -- TODO: guarantee well-scoped labels in untyped
        (just a) → pure (fromNat a - fromNat (length (St.code s)))
 
 regIx : Reg → Nat

@@ -4,9 +4,9 @@ module X86.Common where
 open import Prelude
 open import Tactic.Deriving.Eq
 
-NonZeroM : Maybe Int → Set
-NonZeroM nothing  = ⊤
-NonZeroM (just x) = NonZeroInt x
+WhenJust : {A : Set} → (P : A → Set) → Maybe A → Set
+WhenJust _ nothing = ⊥
+WhenJust P (just x) = P x
 
 record _∧_ (A B : Set) : Set where
   instance constructor ∧I
@@ -32,15 +32,16 @@ Env = Reg → Int
 data Exp (P : Env → Set) : Set
 eval : ∀ {P} (φ : Env) {{_ : P φ}} → Exp P → Maybe Int
 
-NonZeroE : ∀ {P} → Exp P → Set
-NonZeroE {P} e = ∀ {φ} {{_ : P φ}} → NonZeroM (eval φ e)
+ExpP : ∀ {P} → (Int → Set) → Exp P → Set
+ExpP {P} Q e = ∀ {φ} {{pφ : P φ}} → WhenJust Q (eval φ e)
 
 data Exp P where
+  var : Nat → Exp P
   undef : Exp P
   reg : Reg → Exp P
   imm : Int → Exp P
   _⊕_ _⊝_ _⊛_ : Exp P → Exp P → Exp P
-  divE-by modE-by : (b : Exp P) {{nz : NonZeroE b}} → Exp P → Exp P
+  divE-by modE-by : (b : Exp P) {{nz : ExpP NonZeroInt b}} → Exp P → Exp P
 
 infix 2 _⊑ᵉ_ _⊑ˡ_
 
@@ -57,11 +58,12 @@ syntax divE-by y x = x divE y
 syntax modE-by y x = x modE y
 
 evalNZ : ∀ {P} → ((b : Int) {{_ : NonZeroInt b}} → Int → Int) →
-         (φ : Env) {{_ : P φ}} → (b : Exp P) {{_ : NonZeroE b}} → Exp P → Maybe Int
+         (φ : Env) {{_ : P φ}} → (b : Exp P) {{_ : ExpP NonZeroInt b}} → Exp P → Maybe Int
 evalNZ f φ e₁ {{nz}} e with eval φ e₁ | mkInstance (nz {φ})
 ... | nothing | _ = nothing
 ... | just v  | _ = (| (f v) (eval φ e) |)
 
+eval φ (var _) = nothing
 eval φ undef   = nothing
 eval φ (reg r) = just (φ r)
 eval φ (imm n) = just n
@@ -103,6 +105,7 @@ singleRegEnv r r₁ =
     (no  _) → nothing
 
 norm : ∀ {P} → (Reg → NF) → Exp P → NF
+norm φ (var _) = nothing
 norm φ undef = nothing
 norm φ (reg r) = φ r
 norm φ (imm n) = just (n ∷ [])
@@ -166,6 +169,7 @@ instance
   showsPrec {{ShowReg}} _ rdi = showString "%rdi"
 
   ShowExp : ∀ {P} → Show (Exp P)
+  showsPrec {{ShowExp}} p (var i) = showString "x" ∘ shows i
   showsPrec {{ShowExp}} p undef = showString "undef"
   showsPrec {{ShowExp}} p (reg r) = shows r
   showsPrec {{ShowExp}} p (imm n) = shows n

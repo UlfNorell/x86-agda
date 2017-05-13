@@ -7,13 +7,16 @@ open import Numeric.Nat.Divide
 
 open import X86.Common
 import X86.Untyped as Untyped
-open Untyped using (ret; mov; add; sub; imul; idiv; push; pop)
+open Untyped using (ret; mov; add; sub; imul; idiv; push; pop; label; loop)
 
 data IsJust {A : Set} : Maybe A → Set where
   instance just : ∀ x → IsJust (just x)
 
 fromJust : ∀ {A} {m : Maybe A} → IsJust m → A
 fromJust (just x) = x
+
+data PosInt : Int → Set where
+  instance mkPosInt : ∀ {n} → PosInt (pos (suc n))
 
 _≃_ : ∀ {P} → Exp P → Exp P → Set
 _≃_ {P} e e₁ = ∀ φ {{_ : P φ}} → eval φ e ≡ eval φ e₁
@@ -22,26 +25,33 @@ record Obligation (t s : String) {P : Set} : Set where
   instance constructor proof
   field {{getProof}} : P
 
+data Error (t s : String) : Set where
+
+Label = Nat
+
 record S P : Set where
+  inductive
+  no-eta-equality
   field
     [rax] [rcx] [rdx] [rbx] [rsp] [rbp] [rsi] [rdi] : Exp P
-    stack : List (Exp P)
-    isRet : Bool
+    stack  : List (Exp P)
+    labels : List (S P)
+    isRet  : Bool
 
 open S public
 
-record _⊑ˢ_ {P} (s₁ : S P) (s₂ : S P) : Set where
+record _⊑_ {P} (s₁ : S P) (s₂ : S P) : Set where
   instance constructor mkLeq
   field
-    [rax] : [rax] s₁ ⊑ᵉ [rax] s₂
-    [rcx] : [rcx] s₁ ⊑ᵉ [rcx] s₂
-    [rdx] : [rdx] s₁ ⊑ᵉ [rdx] s₂
-    [rbx] : [rbx] s₁ ⊑ᵉ [rbx] s₂
-    [rsp] : [rsp] s₁ ⊑ᵉ [rsp] s₂
-    [rbp] : [rbp] s₁ ⊑ᵉ [rbp] s₂
-    [rsi] : [rsi] s₁ ⊑ᵉ [rsi] s₂
-    [rdi] : [rdi] s₁ ⊑ᵉ [rdi] s₂
-    stack : stack s₁ ⊑ˡ stack s₂
+    [rax]  : [rax] s₁ ⊑ᵉ [rax] s₂
+    [rcx]  : [rcx] s₁ ⊑ᵉ [rcx] s₂
+    [rdx]  : [rdx] s₁ ⊑ᵉ [rdx] s₂
+    [rbx]  : [rbx] s₁ ⊑ᵉ [rbx] s₂
+    [rsp]  : [rsp] s₁ ⊑ᵉ [rsp] s₂
+    [rbp]  : [rbp] s₁ ⊑ᵉ [rbp] s₂
+    [rsi]  : [rsi] s₁ ⊑ᵉ [rsi] s₂
+    [rdi]  : [rdi] s₁ ⊑ᵉ [rdi] s₂
+    stack  : stack s₁ ⊑ˡ stack s₂
 
 get : ∀ {P} → Val → S P → Exp P
 get %rax s = [rax] s
@@ -113,24 +123,15 @@ sub-next src dst s = set dst (getD dst s - get src s) s
 imul-next : ∀ {P} → Val → Dst → S P → S P
 imul-next src dst s = set dst (getD dst s * get src s) s
 
-idiv-next : ∀ {P} (val : Dst) (s : S P) {{_ : NonZeroE (getD val s)}} → S P
-idiv-next val s =
-  set %rdx (get %rax s modE getD val s) $
-  set %rax (get %rax s divE getD val s) s
-
-push-next : ∀ {P} (val : Val) (s : S P) {{_ : IsJust (getStackOffs (get %rsp s))}} → S P
-push-next v s {{pre}} =
-  record s { stack = store s pre (get v s)
-           ; [rsp] = [rsp] s - 8 }
-
-pop-next : ∀ {P} (dst : Dst) (s : S P) {{_ : IsJust (getStackElem (get %rsp s) (stack s))}} → S P
-pop-next dst s {{pre}} =
-  record (set dst (fromJust pre) s) { [rsp] = [rsp] s + 8 }
-
 NonZeroObligation : ∀ {P} → Exp P → Set
 NonZeroObligation e =
   Obligation "Division by zero" ("Show that " & show e & " is nonzero.")
-             {NonZeroE e}
+             {ExpP NonZeroInt e}
+
+idiv-next : ∀ {P} (val : Dst) (s : S P) {{_ : ExpP NonZeroInt (getD val s)}} → S P
+idiv-next val s =
+  set %rdx (get %rax s modE getD val s) $
+  set %rax (get %rax s divE getD val s) s
 
 PushObligation : ∀ {P} → Exp P → Set
 PushObligation e =
@@ -138,11 +139,43 @@ PushObligation e =
              ("Show that " & show e & " is a valid stack pointer.")
              {IsJust (getStackOffs e)}
 
+push-next : ∀ {P} (val : Val) (s : S P) {{_ : IsJust (getStackOffs (get %rsp s))}} → S P
+push-next v s {{pre}} =
+  record s { stack = store s pre (get v s)
+           ; [rsp] = [rsp] s - 8 }
+
 PopObligation : ∀ {P} → Exp P → List (Exp P) → Set
 PopObligation e xs =
   Obligation "Pop"
              ("Show that " & show e & " points to an element on the stack " & show xs & ".")
              {IsJust (getStackElem e xs)}
+
+pop-next : ∀ {P} (dst : Dst) (s : S P) {{_ : IsJust (getStackElem (get %rsp s) (stack s))}} → S P
+pop-next dst s {{pre}} =
+  record (set dst (fromJust pre) s) { [rsp] = [rsp] s + 8 }
+
+
+LabelObligation : ∀ {P} → Exp P → Set
+LabelObligation e =
+  Obligation "Positive loop counter" ("Show that " & show e & " > 0.")
+             {ExpP PosInt e}
+
+label-next : ∀ {P} (wk : S P → S P) → S P → S P
+label-next wk s = record s₁ { labels = labels s₁ ++ s₁ ∷ [] }
+  where
+    l  = length (labels s)
+    s₁ = set %rcx (var l) (wk s)
+
+LoopObligation : ∀ {P} → Label → S P → Set
+LoopObligation l s =
+  case index (labels s) l of λ where
+    nothing → Error "Loop" ("Label " & show l & " is not defined.")
+    (just s₁) →
+      Obligation "Loop" "Show that the loop body preserves the invariant."
+                 {s₁ ⊑ s} -- TODO: better message
+
+loop-next : ∀ {P} → (l : Nat) (s : S P) {{_ : LoopObligation l s}} → S P
+loop-next l s = set %rcx 0 s
 
 Precondition : Set₁
 Precondition = Int → Int → Set
@@ -187,6 +220,16 @@ data Instr (P : Env → Set) (s : S P) : S P → Set where
          {{okrsp  : PopObligation (get %rsp s) (stack s)}} →
          Instr P s (pop-next dst s)
 
+  label : {{_ : LabelObligation (get %rcx s)}} →
+          (wk : S P → S P)
+          {{_ : wk s ⊑ s}} →
+          Instr P s (label-next wk s)
+
+  loop : (l : Label)
+         {{notret : isRet s ≡ false}}
+         {{okloop : LoopObligation l s}} →
+         Instr P s (loop-next l s)
+
 X86Code : (P : Env → Set) → S P → S P → Set
 X86Code P = Path (Instr P)
 
@@ -199,21 +242,24 @@ eraseInstr (imul val dst) = imul val dst
 eraseInstr (idiv val)     = idiv val
 eraseInstr (push val)     = push val
 eraseInstr (pop dst)      = pop dst
+eraseInstr (label _)      = label
+eraseInstr (loop l)       = loop l
 
 erase : ∀ {P i j} → X86Code P i j → Untyped.X86Code
 erase = foldPath (_∷_ ∘ eraseInstr) []
 
 initialState : ∀ {P} → S P
-[rax] initialState = %rax
-[rcx] initialState = %rcx
-[rdx] initialState = %rdx
-[rbx] initialState = %rbx
-[rsp] initialState = %rsp
-[rbp] initialState = %rbp
-[rsi] initialState = %rsi
-[rdi] initialState = %rdi
-stack initialState = []
-isRet initialState = false
+[rax]  initialState = %rax
+[rcx]  initialState = %rcx
+[rdx]  initialState = %rdx
+[rbx]  initialState = %rbx
+[rsp]  initialState = %rsp
+[rbp]  initialState = %rbp
+[rsi]  initialState = %rsi
+[rdi]  initialState = %rdi
+stack  initialState = []
+labels initialState = []
+isRet  initialState = false
 
 initS = initialState
 
@@ -253,3 +299,12 @@ data X86Fun (P : Precondition) (f : (x y : Int) {{_ : P x y}} → Int) : Set whe
             {{isret : Obligation "Return" "Missing return from function."
                                  {isRet s ≡ true}}} →
             X86Code (EnvPrecondition P) initialState s → X86Fun P f
+
+data X86Fun! (P : Precondition) : Set where
+  mkFun : ∀ {s : S (EnvPrecondition P)}
+            {{prbx : [rbx] s isReg rbx}} →
+            {{prsp : [rsp] s isReg rsp}} →
+            {{prbp : [rbp] s isReg rbp}} →
+            {{isret : Obligation "Return" "Missing return from function."
+                                 {isRet s ≡ true}}} →
+            X86Code (EnvPrecondition P) initialState s → X86Fun! P
