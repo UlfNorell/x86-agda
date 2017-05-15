@@ -15,6 +15,9 @@ data IsJust {A : Set} : Maybe A → Set where
 fromJust : ∀ {A} {m : Maybe A} → IsJust m → A
 fromJust (just x) = x
 
+_≠_ : ∀ {a} {A : Set a} {{_ : Eq A}} → A → A → Set
+x ≠ y = isYes (x == y) ≡ false
+
 _≃_ : ∀ {P} → Exp P → Exp P → Set
 _≃_ {P} e e₁ = ∀ φ {{_ : P φ}} → eval φ e ≡ eval φ e₁
 
@@ -137,26 +140,39 @@ storeNth zero _ y (x ∷ xs)    = y ∷ xs
 storeNth (suc n) z y []       = z ∷ storeNth n z y []
 storeNth (suc n) z y (x ∷ xs) = x ∷ storeNth n z y xs
 
-store : ∀ {P} (s : S P) → IsJust (getStackOffs (get %rsp s)) → Exp P → List (Exp P)
-store s j e = storeNth (fromJust j) undef e (stack s)
+data Instr (P : Env → Set) (s : S P) : S P → Set
 
-ret-next : ∀ {P} → S P → S P
-ret-next s = record s { isRet = true }
+-- ret --
 
-mov-next : ∀ {P} → Val → Dst → S P → S P
-mov-next src dst s = set dst (get src s) s
+RetType : ∀ P → S P → Set
+RetType P s =
+  {{notret : isRet s ≡ false}} →
+  Instr P s (record s { isRet = true })
 
-add-next : ∀ {P} → Val → Dst → S P → S P
-add-next src dst s = set dst (getD dst s + get src s) s
+-- mov --
 
-sub-next : ∀ {P} → Val → Dst → S P → S P
-sub-next src dst s = set dst (getD dst s - get src s) s
+MovType : ∀ P → S P → Set
+MovType P s =
+  (src : Val) (dst : Dst)
+  {{notret : isRet s ≡ false}} →
+  Instr P s (set dst (get src s) s)
 
-imul-next : ∀ {P} → Val → Dst → S P → S P
-imul-next src dst s = set dst (getD dst s * get src s) s
+-- add/sub/imul --
 
-NonZeroObligation : ∀ {P} → Exp P → Set
-NonZeroObligation e =
+op-next : ∀ {P} → (Exp P → Exp P → Exp P) → Val → Dst → S P → S P
+op-next _∙_ src dst s = set dst (getD dst s ∙ get src s) s
+
+OpType : ∀ P → (Exp P → Exp P → Exp P) → S P → Set
+OpType P _∙_ s =
+  (src : Val) (dst : Dst)
+  {{notret : isRet s ≡ false}} →
+  Instr P s (op-next _∙_ src dst s)
+
+
+-- idiv --
+
+DivisionByZero : ∀ {P} → Exp P → Set
+DivisionByZero e =
   Obligation "Division by zero" ("Show that " & show e & " is nonzero.")
              {ExpP NonZeroInt e}
 
@@ -165,16 +181,38 @@ idiv-next val s =
   set %rdx (get %rax s modE getD val s) $
   set %rax (get %rax s divE getD val s) s
 
-PushObligation : ∀ {P} → Exp P → Set
-PushObligation e =
+DivType : ∀ P → S P → Set
+DivType P s =
+  (val : Dst)
+  {{notret : isRet s ≡ false}}
+  {{nonz   : DivisionByZero (getD val s)}}
+  {{notrdx : val ≠ %rdx}} →
+  Instr P s (idiv-next val s)
+
+-- push --
+
+ValidStackPtr : ∀ {P} → Exp P → Set
+ValidStackPtr e =
   Obligation "Push"
              ("Show that " & show e & " is a valid stack pointer.")
              {IsJust (getStackOffs e)}
+
+store : ∀ {P} (s : S P) → IsJust (getStackOffs (get %rsp s)) → Exp P → List (Exp P)
+store s j e = storeNth (fromJust j) undef e (stack s)
 
 push-next : ∀ {P} (val : Val) (s : S P) {{_ : IsJust (getStackOffs (get %rsp s))}} → S P
 push-next v s {{pre}} =
   record s { stack = store s pre (get v s)
            ; [rsp] = [rsp] s - 8 }
+
+PushType : ∀ P → S P → Set
+PushType P s =
+  (val : Val)
+  {{notret : isRet s ≡ false}}
+  {{okrsp  : ValidStackPtr (get %rsp s)}} →
+  Instr P s (push-next val s)
+
+-- pop --
 
 PopObligation : ∀ {P} → Exp P → List (Exp P) → Set
 PopObligation e xs =
@@ -213,37 +251,18 @@ loop-next l s with index (labels s) l
 loop-next l s {{}} | nothing
 loop-next l s      | just s₀ = set %rcx 0 (substS l (get %rcx s₀ + var l) s₀)
 
-data Instr (P : Env → Set) (s : S P) : S P → Set where
+data Instr P s where
 
-  ret  : {{notret : isRet s ≡ false}} →
-         Instr P s (ret-next s)
+  ret  : RetType P s
+  mov  : MovType P s
 
-  mov  : (src : Val) (dst : Dst)
-         {{notret : isRet s ≡ false}} →
-         Instr P s (mov-next src dst s)
+  add  : OpType P _+_ s
+  sub  : OpType P _-_ s
+  imul : OpType P _*_ s
 
-  add  : (src : Val) (dst : Dst)
-         {{notret : isRet s ≡ false}} →
-         Instr P s (add-next src dst s)
+  idiv : DivType P s
 
-  sub  : (src : Val) (dst : Dst)
-         {{notret : isRet s ≡ false}} →
-         Instr P s (sub-next src dst s)
-
-  imul : (src : Val) (dst : Dst)
-         {{notret : isRet s ≡ false}} →
-         Instr P s (imul-next src dst s)
-
-  idiv : (val : Dst)
-         {{notret : isRet s ≡ false}}
-         {{nonz   : NonZeroObligation (getD val s)}}
-         {{notrdx : isYes (val == %rdx) ≡ false}} →
-         Instr P s (idiv-next val s)
-
-  push : (val : Val)
-         {{notret : isRet s ≡ false}} →
-         {{okrsp  : PushObligation (get %rsp s)}} →
-         Instr P s (push-next val s)
+  push : PushType P s
 
   pop  : (dst : Dst)
          {{notret : isRet s ≡ false}}
