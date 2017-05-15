@@ -9,6 +9,18 @@ iterInt : {A : Set} → Int → (A → A) → A → A
 iterInt (pos (suc n)) f z = f (iterInt (pos n) f z)
 iterInt _             f z = z
 
+infixl 7 _quot′_ _rem′_
+
+_quot′_ : Int → Int → Int
+_ quot′ (pos 0) = 0
+a quot′ b@(pos (suc _)) = a quot b
+a quot′ b@(negsuc _)    = a quot b
+
+_rem′_ : Int → Int → Int
+_ rem′ (pos 0) = 0
+a rem′ b@(pos (suc _)) = a rem b
+a rem′ b@(negsuc _)    = a rem b
+
 WhenJust : {A : Set} → (P : A → Set) → Maybe A → Set
 WhenJust _ nothing = ⊥
 WhenJust P (just x) = P x
@@ -51,26 +63,15 @@ ExpP : ∀ {P} → (Int → Set) → Exp P → Set
 ExpP {P} Q e = ∀ {φ} {{pφ : P φ}} → WhenJust Q (eval φ e)
 
 infixl 6 _⊕_ _⊝_
-infixl 7 _⊛_ divE-by modE-by
+infixl 7 _⊛_ _divE_ _modE_
 
 data Exp P where
   var : Nat → Exp P
   undef : Exp P
   reg : Reg → Exp P
   imm : Int → Exp P
-  _⊕_ _⊝_ _⊛_ : Exp P → Exp P → Exp P
-  divE-by modE-by : (b : Exp P) {{nz : ExpP NonZeroInt b}} → Exp P → Exp P
+  _⊕_ _⊝_ _⊛_ _divE_ _modE_ : Exp P → Exp P → Exp P
   iterE : (n : Exp P) (x : Nat) (f z : Exp P) → Exp P
-
-syntax divE-by y x = x divE y
-syntax modE-by y x = x modE y
-
-
-evalNZ : ∀ {P} → ((b : Int) {{_ : NonZeroInt b}} → Int → Int) →
-           (φ : Env) {{_ : P φ}} → (b : Exp P) {{_ : ExpP NonZeroInt b}} → Exp P → Maybe Int
-evalNZ f φ e₁ {{nz}} e with eval φ e₁ | mkInstance (nz {φ})
-... | nothing | _ = nothing
-... | just v  | _ = (| (f v) (eval φ e) |)
 
 evalFun : ∀ {P} (φ : Env) {{_ : P φ}} → Nat → Exp P → Maybe (Int → Int)
 
@@ -81,21 +82,9 @@ eval φ (imm n) = just n
 eval φ (e ⊕ e₁) = (| eval φ e + eval φ e₁ |)
 eval φ (e ⊝ e₁) = (| eval φ e - eval φ e₁ |)
 eval φ (e ⊛ e₁) = (| eval φ e * eval φ e₁ |)
-eval φ (e divE e₁) = evalNZ quotInt-by φ e₁ e
-eval φ (e modE e₁) = evalNZ remInt-by  φ e₁ e
+eval φ (e divE e₁) = (| eval φ e quot′ eval φ e₁ |)
+eval φ (e modE e₁) = (| eval φ e rem′ eval φ e₁ |)
 eval φ (iterE n x f z) = (| iterInt (eval φ n) (evalFun φ x f) (eval φ z) |)
-
-evalFunNZ : ∀ {P} → ((b : Int) {{_ : NonZeroInt b}} → Int → Int) →
-              (φ : Env) {{_ : P φ}} → Nat → (b : Exp P) {{_ : ExpP NonZeroInt b}} →
-              Exp P → Maybe (Int → Int)
-
-postulate
-  evalFunLem : ∀ {P Q} (a : Exp P) {{_ : ExpP Q a}} {φ} {{_ : P φ}} x →
-                 ∀ n → maybe ⊤ (λ f → Q (f n)) (evalFun φ x a)
-
-evalFunNZ h φ {{pφ}} x f {{nz}} g with evalFun φ x f | evalFunLem {Q = NonZeroInt} f {φ} {{pφ}} x
-... | nothing | _   = nothing
-... | just f′ | nzf = (| (λ g′ z → h (f′ z) {{nzf z}} (g′ z)) (evalFun φ x g) |)
 
 evalFun φ x (var y) = ifYes x == y then just id else nothing
 evalFun φ x undef = nothing
@@ -104,33 +93,16 @@ evalFun φ x (imm n) = just λ _ → n
 evalFun φ x (f ⊕ f₁) = (| (λ f g n → f n + g n) (evalFun φ x f) (evalFun φ x f₁) |)
 evalFun φ x (f ⊝ f₁) = (| (λ f g n → f n - g n) (evalFun φ x f) (evalFun φ x f₁) |)
 evalFun φ x (f ⊛ f₁) = (| (λ f g n → f n * g n) (evalFun φ x f) (evalFun φ x f₁) |)
-evalFun φ x (divE-by f f₁) = evalFunNZ quotInt-by φ x f f₁
-evalFun φ x (modE-by f f₁) = evalFunNZ remInt-by φ x f f₁
+evalFun φ x (f divE f₁) = (| (λ f g n → f n quot′ g n) (evalFun φ x f) (evalFun φ x f₁) |)
+evalFun φ x (f modE f₁) = (| (λ f g n → f n rem′  g n) (evalFun φ x f) (evalFun φ x f₁) |)
 evalFun φ x (iterE n y f z) = nothing -- TODO: nested loops
 -- (| (λ n f z i → iterInt (n i) (f i) (z i)) (evalFun φ x n) nothing (evalFun φ x z) |)
-
--- evalFunLem = {!!} -- TODO
-
-data _===_ {P} : Exp P → Exp P → Set where
-  instance
-    imm : ∀ {x} → imm x === imm x
-    reg : ∀ {r} → reg r === reg r
-    var : ∀ {x} → var x === var x
-    _⊕_ : ∀ {a b c d} → a === c → b === d → (a ⊕ b) === (c ⊕ d)
-    _⊝_ : ∀ {a b c d} → a === c → b === d → (a ⊝ b) === (c ⊝ d)
-    _⊛_ : ∀ {a b c d} → a === c → b === d → (a ⊛ b) === (c ⊛ d)
-    divE-by : ∀ {a b c d} {{p : ExpP NonZeroInt a}} {{q : ExpP NonZeroInt c}} →
-                a === c → b === d → (divE-by a b) === (divE-by c d)
-    modE-by : ∀ {a b c d} {{p : ExpP NonZeroInt a}} {{q : ExpP NonZeroInt c}} →
-                a === c → b === d → (modE-by a b) === (modE-by c d)
-    iterE : ∀ {n n₁ x f f₁ z z₁} → n === n₁ → f === f₁ → z === z₁ →
-              iterE n x f z === iterE n₁ x f₁ z₁
 
 infix 2 _⊑ᵉ_ _⊑ˡ_
 
 _⊑ᵉ_ : ∀ {P} → Exp P → Exp P → Set
 undef ⊑ᵉ _  = ⊤
-e     ⊑ᵉ e₁ = e === e₁
+e     ⊑ᵉ e₁ = e ≡ e₁
 
 _⊑ˡ_ : ∀ {P} → List (Exp P) → List (Exp P) → Set
 [] ⊑ˡ _ = ⊤
@@ -298,8 +270,8 @@ subst i u (imm x) = imm x
 subst i u (v ⊕ v₁) = subst i u v + subst i u v₁
 subst i u (v ⊝ v₁) = subst i u v - subst i u v₁
 subst i u (v ⊛ v₁) = subst i u v * subst i u v₁
-subst i u (divE-by v v₁) = divE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
-subst i u (modE-by v v₁) = modE-by (subst i u v) {{substCor i u v}} (subst i u v₁)
+subst i u (v divE v₁) = subst i u v divE subst i u v₁
+subst i u (v modE v₁) = subst i u v modE subst i u v₁
 subst i u (iterE n x f b) =
   -- TODO: capture avoidance!
   iterE' (subst i u n) x (subst i u f) (subst i u b)

@@ -32,7 +32,12 @@ getIntArgs n =
            (yes refl) → pure (pos <$> listToVec xs)
            (no _)     → usage n
 
+M : Int
+M = 1636102261
 
+iterate : {A : Set} → Nat → (A → A) → A → A
+iterate zero    f x = x
+iterate (suc n) f x = iterate n f $! f x
 
 
 --- === Title slide

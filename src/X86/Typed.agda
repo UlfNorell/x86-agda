@@ -144,18 +144,24 @@ data Instr (P : Env → Set) (s : S P) : S P → Set
 
 -- ret --
 
+ret-next : ∀ {P} → S P → S P
+ret-next s = record s { isRet = true }
+
 RetType : ∀ P → S P → Set
 RetType P s =
   {{notret : isRet s ≡ false}} →
-  Instr P s (record s { isRet = true })
+  Instr P s (ret-next s)
 
 -- mov --
+
+mov-next : ∀ {P} → Val → Dst → S P → S P
+mov-next src dst s = set dst (get src s) s
 
 MovType : ∀ P → S P → Set
 MovType P s =
   (src : Val) (dst : Dst)
   {{notret : isRet s ≡ false}} →
-  Instr P s (set dst (get src s) s)
+  Instr P s (mov-next src dst s)
 
 -- add/sub/imul --
 
@@ -193,16 +199,12 @@ DivType P s =
 
 ValidStackPtr : ∀ {P} → Exp P → Set
 ValidStackPtr e =
-  Obligation "Push"
-             ("Show that " & show e & " is a valid stack pointer.")
+  Obligation "Push" ("Show that " & show e & " is a valid stack pointer.")
              {IsJust (getStackOffs e)}
-
-store : ∀ {P} (s : S P) → IsJust (getStackOffs (get %rsp s)) → Exp P → List (Exp P)
-store s j e = storeNth (fromJust j) undef e (stack s)
 
 push-next : ∀ {P} (val : Val) (s : S P) {{_ : IsJust (getStackOffs (get %rsp s))}} → S P
 push-next v s {{pre}} =
-  record s { stack = store s pre (get v s)
+  record s { stack = storeNth (fromJust pre) undef (get v s) (stack s)
            ; [rsp] = [rsp] s - 8 }
 
 PushType : ∀ P → S P → Set
@@ -212,10 +214,11 @@ PushType P s =
   {{okrsp  : ValidStackPtr (get %rsp s)}} →
   Instr P s (push-next val s)
 
+
 -- pop --
 
-PopObligation : ∀ {P} → Exp P → List (Exp P) → Set
-PopObligation e xs =
+ValidStackElem : ∀ {P} → Exp P → List (Exp P) → Set
+ValidStackElem e xs =
   Obligation "Pop"
              ("Show that " & show e & " points to an element on the stack " & show xs & ".")
              {IsJust (getStackElem e xs)}
@@ -224,9 +227,18 @@ pop-next : ∀ {P} (dst : Dst) (s : S P) {{_ : IsJust (getStackElem (get %rsp s)
 pop-next dst s {{pre}} =
   record (set dst (fromJust pre) s) { [rsp] = [rsp] s + 8 }
 
+PopType : ∀ P → S P → Set
+PopType P s =
+  (dst : Dst)
+  {{notret : isRet s ≡ false}}
+  {{okrsp  : ValidStackElem (get %rsp s) (stack s)}} →
+  Instr P s (pop-next dst s)
 
-LabelObligation : ∀ {P} → Exp P → Set
-LabelObligation e =
+
+-- label --
+
+PosLoopCounter : ∀ {P} → Exp P → Set
+PosLoopCounter e =
   Obligation "Positive loop counter" ("Show that " & show e & " > 0.")
              {ExpP PosInt e}
 
@@ -237,6 +249,16 @@ label-next : ∀ {P} (l : Label) (wk : Label → S P → S P) → S P → S P
 label-next l wk s = record s₁ { labels = labels s₁ ++ s₁ ∷ [] }
   where
     s₁ = set %rcx (get %rcx s - var l) (wk l s)
+
+LabelType : ∀ P → S P → Set
+LabelType P s =
+  {{_ : PosLoopCounter (get %rcx s)}} →
+  (wk : Label → S P → S P)
+  (let l = getLabel s)
+  {{okwk : substS l 0 (wk l s) ⊑ s}} →
+  Instr P s (label-next l wk s)
+
+-- loop --
 
 LoopObligation : ∀ {P} → Label → S P → Set
 LoopObligation l s =
@@ -251,6 +273,15 @@ loop-next l s with index (labels s) l
 loop-next l s {{}} | nothing
 loop-next l s      | just s₀ = set %rcx 0 (substS l (get %rcx s₀ + var l) s₀)
 
+LoopType : ∀ P → S P → Set
+LoopType P s =
+  (l : Label)
+  {{notret : isRet s ≡ false}}
+  {{okloop : LoopObligation l s}} →
+  Instr P s (loop-next l s)
+
+-- The instructions --
+
 data Instr P s where
 
   ret  : RetType P s
@@ -263,25 +294,15 @@ data Instr P s where
   idiv : DivType P s
 
   push : PushType P s
+  pop  : PopType P s
 
-  pop  : (dst : Dst)
-         {{notret : isRet s ≡ false}}
-         {{okrsp  : PopObligation (get %rsp s) (stack s)}} →
-         Instr P s (pop-next dst s)
-
-  label : ..{{_ : LabelObligation (get %rcx s)}} →
-          (wk : Label → S P → S P)
-          (let l = getLabel s)
-          ..{{okwk : substS l 0 (wk l s) ⊑ s}} →
-          Instr P s (label-next l wk s)
-
-  loop : (l : Label)
-         {{notret : isRet s ≡ false}}
-         ..{{okloop : LoopObligation l s}} →
-         Instr P s (loop-next l s)
+  label : LabelType P s
+  loop  : LoopType P s
 
 X86Code : (P : Env → Set) → S P → S P → Set
 X86Code P = Path (Instr P)
+
+-- Forgetting the types --
 
 eraseInstr : ∀ {P i j} → Instr P i j → Untyped.Instr
 eraseInstr ret = ret
@@ -303,6 +324,9 @@ Precondition = Int → Int → Set
 
 OnEnv : Precondition → Env → Set
 OnEnv P φ = P (φ rdi) (φ rsi)
+
+X86Code' : (P : Precondition) → S (OnEnv P) → S (OnEnv P) → Set
+X86Code' P = X86Code (OnEnv P)
 
 funEnv : Int → Reg → Maybe Int
 funEnv n rdi = just n
@@ -330,6 +354,8 @@ _isFun_ : ∀ {P : Precondition} → Exp (OnEnv P) → (∀ x y {{_ : P x y}} �
 _isFun_ {P} e f =
   ∀ {x y vax vcx vdx vbx vsp vbp} {{_ : P x y}} →
     eval (mkEnv vax vcx vdx vbx vsp vbp y x) e ≡ just (f x y)
+
+-- Functions --
 
 data X86Fun (P : Precondition) (f : (x y : Int) {{_ : P x y}} → Int) : Set where
   mkFun : ∀ {s : S (OnEnv P)}

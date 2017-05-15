@@ -1,4 +1,4 @@
-
+{-# OPTIONS --show-implicit #-}
 module Test where
 
 open import Prelude
@@ -49,7 +49,7 @@ loop-test
 loop-test-fun : X86Fun (λ _ y → PosInt y) (λ x y → x + y)
 loop-test-fun = mkFun loop-test
 
-blumblumshubStep : X86Fun Pre λ x M → x * x rem M
+blumblumshubStep : X86Fun Pre λ x M → x * x rem′ M
 blumblumshubStep = mkFun
   ( imul %rdi %rdi
   ∷ mov  %rdi %rax
@@ -71,7 +71,7 @@ blumblumRaw M
   ∷ ret
   ∷ []
 
-blumblumLoopTyped : (M : Int) {{_ : NonZeroInt M}} → X86Code (OnEnv λ _ y → PosInt y) initS _
+blumblumLoopTyped : (M : Int) {{_ : NonZeroInt M}} → X86Code' (λ _ y → PosInt y) initS _
 blumblumLoopTyped M
   = mov %rsi %rcx
   ∷ mov %rdi %rax
@@ -84,7 +84,7 @@ blumblumLoopTyped M
   ∷ ret
   ∷ []
 
-blumblumLoopTyped' : (M : Int) {{_ : NonZeroInt M}} → X86Code (OnEnv λ _ y → PosInt y) initS _
+blumblumLoopTyped' : (M : Int) {{_ : NonZeroInt M}} → X86Code' (λ _ y → PosInt y) initS _
 blumblumLoopTyped' M
   = mov %rsi %rcx
   ∷ mov %rdi %rax
@@ -103,7 +103,7 @@ blumblumTyped M = mkFun (blumblumLoopTyped M)
 
 blumblumTyped' : (M : Int) {{_ : NonZeroInt M}} →
                  X86Fun (λ _ y → PosInt y)
-                        (λ x y → iterInt y (λ z → z * z rem M) x)
+                        (λ x y → iterInt y (λ z → z * z rem′ M) x)
 blumblumTyped' M = mkFun (blumblumLoopTyped' M)
 
 rawCode : Raw.X86Code
@@ -118,7 +118,7 @@ rawCode
 
 -- fun : X86Fun λ x y → ((x + y - 100) * (x + y)) quot 2
 -- fun : X86Fun λ x y → (x + y - 100) * (x + y)
-fun : X86Fun Pre λ x y → x quot y
+fun : X86Fun Pre λ x y → x quot′ y
 fun = mkFun code
 
 finalState : ∀ {P f} → X86Fun P f → S _
