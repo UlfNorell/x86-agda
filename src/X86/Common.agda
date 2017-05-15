@@ -72,6 +72,7 @@ data Exp P where
   imm : Int → Exp P
   _⊕_ _⊝_ _⊛_ _divE_ _modE_ : Exp P → Exp P → Exp P
   iterE : (n : Exp P) (x : Nat) (f z : Exp P) → Exp P
+  -- iterate n (λ x → f) z
 
 evalFun : ∀ {P} (φ : Env) {{_ : P φ}} → Nat → Exp P → Maybe (Int → Int)
 
@@ -298,6 +299,8 @@ subst i u (iterE n x f b) =
 -- ... | notFree eqv | notFree eqv₁ = notFree (nz-cong {{{!!}}} divE-by (subst i u v) (subst i u v₁) v v₁ eqv eqv₁)
 -- ... | _ | _ = {!!}
 -- substLem i u (modE-by v v₁) = {!!}
+
+
 
 loopInv : ∀ {P} → Nat → (Exp P → Exp P) → Exp P → Exp P
 loopInv l f z = iterE (var l) (suc l) (f (var (suc l))) z

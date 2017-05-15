@@ -58,14 +58,64 @@ iterate (suc n) f x = iterate n f $! f x
 
 
 
+
+
+
+
+
+
+
+
 --- === Code
 
-
-fun : Function λ x y → x + y
+fun : X86Fun (λ x y → NonZeroInt y) λ x y → x quot′ y
 fun = mkFun
   ( mov %rdi %rax
-  ∷ add %rsi %rax
-  ∷ ret ∷ [] )
+  ∷ sub 8 %rsp
+  ∷ push %rsi
+  ∷ idiv %rsi
+  ∷ add 16 %rsp
+  ∷ ret
+  ∷ [] )
+
+loop' : X86Fun (λ _ y → PosInt y) (λ x y → x + y)
+loop' = mkFun
+  ( mov %rsi %rcx
+  ∷ label (λ l s → set %rdi (%rdi + var l) s)
+  ∷ add 1 %rdi
+  ∷ loop 0
+  ∷ mov %rdi %rax
+  ∷ ret
+  ∷ []
+  )
+
+blumblumLoopTyped : (M : Int) {{_ : NonZeroInt M}} → X86Code' (λ _ y → PosInt y) initS _
+blumblumLoopTyped M
+  = mov %rsi %rcx
+  ∷ mov %rdi %rax
+  ∷ mov (imm M) %rdi
+  ∷ label (λ l → set %rax (loopInv l (λ x → x * x modE (imm M)) %rdi) ∘ set %rdx undef)
+  ∷ imul %rax %rax
+  ∷ idiv %rdi
+  ∷ mov %rdx %rax
+  ∷ loop 0
+  ∷ ret
+  ∷ []
+
+blumblumTyped : (M : Int) {{_ : NonZeroInt M}} →
+                 X86Fun (λ _ y → PosInt y)
+                        (λ x y → iterInt y (λ z → z * z rem′ M) x)
+blumblumTyped M = mkFun (blumblumLoopTyped M)
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -75,11 +125,10 @@ fun = mkFun
 
 --- === Main
 
-
-
-
 main : IO ⊤
 main =
-  do f ← loadMachineCode (compileFun fun)
-  -| caseM getIntArgs 2 of λ where
-       (x ∷ y ∷ []) → print (f x y)
+  do f ← loadMachineCode (compileFun (blumblumTyped M))
+  -| caseM getIntArgs 3 of λ where
+       (pos 0 ∷ x ∷ y ∷ []) → print (f x y)
+       (_ ∷ x ∷ pos y ∷ []) → print (iterate y (λ x → x * x rem M) x)
+       _ → return _

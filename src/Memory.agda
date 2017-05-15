@@ -7,6 +7,7 @@ open import Prelude
 
 import Control.Monad
 import Data.Word
+import Data.Int
 import Data.Bits
 import Foreign.Ptr
 import Foreign.ForeignPtr
@@ -22,7 +23,7 @@ import qualified Data.Vector.Storable.Mutable as VM
 
 type Function a = a -> a -> a
 
-loadMachineCode :: [Word8] -> IO (Function Int)
+loadMachineCode :: [Word8] -> IO (Function Int64)
 loadMachineCode code = do
   let len = length code
   mem  <- allocateMemory (fromIntegral len)
@@ -32,9 +33,9 @@ loadMachineCode code = do
   return (getFunction mem)
 
 foreign import ccall "dynamic"
-  mkFun :: FunPtr (Function Int) -> Function Int
+  mkFun :: FunPtr (Function Int64) -> Function Int64
 
-getFunction :: Ptr Word8 -> Function Int
+getFunction :: Ptr Word8 -> Function Int64
 getFunction mem = mkFun (unsafeCoerce mem)
 
 foreign import ccall unsafe "sys/mman.h mmap"
@@ -65,11 +66,6 @@ allocateMemory size = mmap nullPtr size (pWrite .|. pExec) (mAnon .|. mPriv)
 
 castFun :: (Num a, Integral a) => Function a -> Function Integer
 castFun f x y = toInteger $ f (fromInteger x) (fromInteger y)
-
--- {-# NOINLINE loadMachineCode' #-}
--- loadMachineCode' :: [Integer] -> Function Integer
--- loadMachineCode' = castFun
---                   . unsafePerformIO . loadMachineCode . map fromInteger
 
 loadMachineCode' :: [Integer] -> IO (Function Integer)
 loadMachineCode' = fmap castFun . loadMachineCode . map fromInteger

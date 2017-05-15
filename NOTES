@@ -32,6 +32,21 @@
   - How to present implementation? Be nice to do some incremental typing.
 
   - Phase 1: Straighline code (no div)
+    - behind the scenes (Memory and Compile)
+    - state record
+    - functions
+      - reg preservation
+      - semantics
+    - stack manipulation
+
   - Phase 2: Custom preconditions: x quot y
+
   - Phase 3: Loops
+    - simple weakening
+
   - Phase 4: Loops with semantics
+    - iterE
+
+  - Future work
+    - Heap
+    - More interesting loops

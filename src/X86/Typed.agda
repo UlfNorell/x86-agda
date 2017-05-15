@@ -27,6 +27,10 @@ record Obligation (t s : String) {P : Set} : Set where
 
 data Error (t s : String) : Set where
 
+
+
+
+
 Label = Nat
 
 record S P : Set where
@@ -37,6 +41,12 @@ record S P : Set where
     stack  : List (Exp P)
     labels : List (S P)
     isRet  : Bool
+
+
+
+
+
+
 
 open S public
 
@@ -117,6 +127,16 @@ set %rbp e s = record s { [rbp] = e }
 set %rsi e s = record s { [rsi] = e }
 set %rdi e s = record s { [rdi] = e }
 
+
+
+
+
+
+
+
+
+
+
 getStackOffs : ∀ {P} → Exp P → Maybe Nat
 getStackOffs sp =
   case norm (singleRegEnv rsp) sp of λ where
@@ -127,6 +147,10 @@ getStackOffs sp =
         (yes (factor q eq)) → just q
         (no  _) → nothing
     _ → nothing
+
+
+
+
 
 getStackElem : ∀ {P} → Exp P → List (Exp P) → Maybe (Exp P)
 getStackElem sp st =
@@ -163,6 +187,10 @@ MovType P s =
   {{notret : isRet s ≡ false}} →
   Instr P s (mov-next src dst s)
 
+
+
+
+
 -- add/sub/imul --
 
 op-next : ∀ {P} → (Exp P → Exp P → Exp P) → Val → Dst → S P → S P
@@ -173,6 +201,11 @@ OpType P _∙_ s =
   (src : Val) (dst : Dst)
   {{notret : isRet s ≡ false}} →
   Instr P s (op-next _∙_ src dst s)
+
+
+
+
+
 
 
 -- idiv --
@@ -195,6 +228,11 @@ DivType P s =
   {{notrdx : val ≠ %rdx}} →
   Instr P s (idiv-next val s)
 
+
+
+
+
+
 -- push --
 
 ValidStackPtr : ∀ {P} → Exp P → Set
@@ -213,6 +251,7 @@ PushType P s =
   {{notret : isRet s ≡ false}}
   {{okrsp  : ValidStackPtr (get %rsp s)}} →
   Instr P s (push-next val s)
+
 
 
 -- pop --
@@ -252,11 +291,14 @@ label-next l wk s = record s₁ { labels = labels s₁ ++ s₁ ∷ [] }
 
 LabelType : ∀ P → S P → Set
 LabelType P s =
-  {{_ : PosLoopCounter (get %rcx s)}} →
   (wk : Label → S P → S P)
   (let l = getLabel s)
-  {{okwk : substS l 0 (wk l s) ⊑ s}} →
+  {{okwk   : substS l 0 (wk l s) ⊑ s}} →
+  {{posrcx : PosLoopCounter (get %rcx (wk l s))}} →
   Instr P s (label-next l wk s)
+
+
+
 
 -- loop --
 
@@ -266,7 +308,8 @@ LoopObligation l s =
     nothing → Error "Loop" ("Label " & show l & " is not defined.")
     (just s₀) →
       Obligation "Loop" "Show that the loop body preserves the invariant."
-                 {substS l (var l ⊕ 1) s₀ ⊑ set %rcx (get %rcx s₀ - 1) s} -- TODO: better message
+                 {substS l (var l ⊕ 1) s₀ ⊑ set %rcx (get %rcx s - 1) s}
+                 -- s₀ ⊑ %rcx-- s
 
 loop-next : ∀ {P} → (l : Nat) (s : S P) {{_ : LoopObligation l s}} → S P
 loop-next l s with index (labels s) l
@@ -298,6 +341,7 @@ data Instr P s where
 
   label : LabelType P s
   loop  : LoopType P s
+
 
 X86Code : (P : Env → Set) → S P → S P → Set
 X86Code P = Path (Instr P)
@@ -366,6 +410,11 @@ data X86Fun (P : Precondition) (f : (x y : Int) {{_ : P x y}} → Int) : Set whe
             {{isret : Obligation "Return" "Missing return from function."
                                  {isRet s ≡ true}}} →
             X86Code (OnEnv P) initS s → X86Fun P f
+
+
+
+
+
 
 data X86Fun! (P : Precondition) : Set where
   mkFun : ∀ {s : S (OnEnv P)}
