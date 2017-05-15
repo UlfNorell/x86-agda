@@ -15,7 +15,7 @@ open Raw using (mov; add; sub; imul; idiv; label; loop; push; pop; ret)
 Pre : Precondition
 Pre _ y = NonZeroInt y
 
-code : X86Code (EnvPrecondition Pre) initS _
+code : X86Code (OnEnv Pre) initS _
 code = mov %rdi %rax
      ∷ idiv %rsi
      ∷ ret
@@ -36,7 +36,7 @@ code₁
 fun₁ : X86Fun (λ _ _ → ⊤) λ x y → (x + y - 100) * (x + y)
 fun₁ = mkFun code₁
 
-loop-test : X86Code (EnvPrecondition λ _ y → PosInt y) initS _
+loop-test : X86Code (OnEnv λ _ y → PosInt y) initS _
 loop-test
   = mov %rsi %rcx
   ∷ label (λ l → set %rdi (%rdi + var l))
@@ -71,7 +71,7 @@ blumblumRaw M
   ∷ ret
   ∷ []
 
-blumblumLoopTyped : (M : Int) {{_ : NonZeroInt M}} → X86Code (EnvPrecondition λ _ y → PosInt y) initS _
+blumblumLoopTyped : (M : Int) {{_ : NonZeroInt M}} → X86Code (OnEnv λ _ y → PosInt y) initS _
 blumblumLoopTyped M
   = mov %rsi %rcx
   ∷ mov %rdi %rax
@@ -84,7 +84,7 @@ blumblumLoopTyped M
   ∷ ret
   ∷ []
 
-blumblumLoopTyped' : (M : Int) {{_ : NonZeroInt M}} → X86Code (EnvPrecondition λ _ y → PosInt y) initS _
+blumblumLoopTyped' : (M : Int) {{_ : NonZeroInt M}} → X86Code (OnEnv λ _ y → PosInt y) initS _
 blumblumLoopTyped' M
   = mov %rsi %rcx
   ∷ mov %rdi %rax
@@ -124,30 +124,21 @@ fun = mkFun code
 finalState : ∀ {P f} → X86Fun P f → S _
 finalState (mkFun {s = s} _) = s
 
-compileFun : ∀ {P f} → X86Fun P f → MachineCode
-compileFun (mkFun code) = compile code
-
-compileFun! : ∀ {P} → X86Fun! P → MachineCode
-compileFun! (mkFun code) = compile code
-
-showMachineCode : MachineCode → String
-showMachineCode = foldr (printf "%02x %s") ""
-
 showCode : ∀ {P s s₁} → X86Code P s s₁ → String
 showCode = showMachineCode ∘ compile
 
 jit! : ∀ {P} → X86Fun! P → IO (∀ x y {{_ : P x y}} → Int)
 jit! fun =
-  do f ← writeMachineCode (compileFun! fun)
+  do f ← loadMachineCode (compileFun! fun)
   -| pure (λ x y {{_}} → f x y)
 
 jit : ∀ {P f} → X86Fun P f → IO (∀ x y {{_ : P x y}} → Int)
 jit fun =
-  do f ← writeMachineCode (compileFun fun)
+  do f ← loadMachineCode (compileFun fun)
   -| pure (λ x y {{_}} → f x y)
 
 jitRaw : Raw.X86Code → IO (Int → Int → Int)
-jitRaw code = writeMachineCode (C.compile code)
+jitRaw code = loadMachineCode (C.compile code)
 
 usage : IO ⊤
 usage =

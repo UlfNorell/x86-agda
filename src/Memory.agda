@@ -22,8 +22,8 @@ import qualified Data.Vector.Storable.Mutable as VM
 
 type Function a = a -> a -> a
 
-writeMachineCode :: [Word8] -> IO (Function Int)
-writeMachineCode code = do
+loadMachineCode :: [Word8] -> IO (Function Int)
+loadMachineCode code = do
   let len = length code
   mem  <- allocateMemory (fromIntegral len)
   code <- codePtr code
@@ -66,17 +66,19 @@ allocateMemory size = mmap nullPtr size (pWrite .|. pExec) (mAnon .|. mPriv)
 castFun :: (Num a, Integral a) => Function a -> Function Integer
 castFun f x y = toInteger $ f (fromInteger x) (fromInteger y)
 
--- {-# NOINLINE writeMachineCode' #-}
--- writeMachineCode' :: [Integer] -> Function Integer
--- writeMachineCode' = castFun
---                   . unsafePerformIO . writeMachineCode . map fromInteger
+-- {-# NOINLINE loadMachineCode' #-}
+-- loadMachineCode' :: [Integer] -> Function Integer
+-- loadMachineCode' = castFun
+--                   . unsafePerformIO . loadMachineCode . map fromInteger
 
-writeMachineCode' :: [Integer] -> IO (Function Integer)
-writeMachineCode' = fmap castFun . writeMachineCode . map fromInteger
+loadMachineCode' :: [Integer] -> IO (Function Integer)
+loadMachineCode' = fmap castFun . loadMachineCode . map fromInteger
 
 #-}
 
-postulate
-  writeMachineCode : List Nat → IO (Int → Int → Int)
+Word8 = Nat
 
-{-# COMPILE GHC writeMachineCode = writeMachineCode' #-}
+postulate
+  loadMachineCode : List Word8 → IO (Int → Int → Int)
+
+{-# COMPILE GHC loadMachineCode = loadMachineCode' #-}

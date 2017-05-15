@@ -37,6 +37,19 @@ record S P : Set where
 
 open S public
 
+initS : ∀ {P} → S P
+[rax]  initS = %rax
+[rcx]  initS = %rcx
+[rdx]  initS = %rdx
+[rbx]  initS = %rbx
+[rsp]  initS = %rsp
+[rbp]  initS = %rbp
+[rsi]  initS = %rsi
+[rdi]  initS = %rdi
+stack  initS = []
+labels initS = []
+isRet  initS = false
+
 record _⊑_ {P} (s₁ : S P) (s₂ : S P) : Set where
   instance constructor mkLeq
   field
@@ -50,7 +63,6 @@ record _⊑_ {P} (s₁ : S P) (s₂ : S P) : Set where
     [rdi]  : [rdi] s₁ ⊑ᵉ [rdi] s₂
     stack  : stack s₁ ⊑ˡ stack s₂
 
-{-# TERMINATING #-} -- ugh
 substS : ∀ {P} → Label → Exp P → S P → S P
 substS i e s =
   record s
@@ -65,6 +77,7 @@ substS i e s =
     ; stack  = map (subst i e) (stack s)
     ; labels = [] -- map (substS i e) (labels s)
     ; isRet  = isRet s }
+
 -- [rax] (substS i e s) = subst i e ([rax] s)
 -- [rcx] (substS i e s) = subst i e ([rcx] s)
 -- [rdx] (substS i e s) = subst i e ([rdx] s)
@@ -117,11 +130,6 @@ getStackElem sp st =
   case getStackOffs sp of λ where
     (just (suc n)) → index st n
     _              → nothing
-
-data PopPre {P} (s : S P) : Set where
-  instance popPre : isRet s ≡ false →
-                    IsJust (getStackElem (get %rsp s) (stack s)) →
-                    PopPre s
 
 storeNth : {A : Set} → Nat → A → A → List A → List A
 storeNth zero _ y []          = y ∷ []
@@ -205,12 +213,6 @@ loop-next l s with index (labels s) l
 loop-next l s {{}} | nothing
 loop-next l s      | just s₀ = set %rcx 0 (substS l (get %rcx s₀ + var l) s₀)
 
-Precondition : Set₁
-Precondition = Int → Int → Set
-
-EnvPrecondition : Precondition → Env → Set
-EnvPrecondition P φ = P (φ rdi) (φ rsi)
-
 data Instr (P : Env → Set) (s : S P) : S P → Set where
 
   ret  : {{notret : isRet s ≡ false}} →
@@ -277,20 +279,11 @@ eraseInstr (loop l)       = loop l
 erase : ∀ {P i j} → X86Code P i j → Untyped.X86Code
 erase = foldPath (_∷_ ∘ eraseInstr) []
 
-initialState : ∀ {P} → S P
-[rax]  initialState = %rax
-[rcx]  initialState = %rcx
-[rdx]  initialState = %rdx
-[rbx]  initialState = %rbx
-[rsp]  initialState = %rsp
-[rbp]  initialState = %rbp
-[rsi]  initialState = %rsi
-[rdi]  initialState = %rdi
-stack  initialState = []
-labels initialState = []
-isRet  initialState = false
+Precondition : Set₁
+Precondition = Int → Int → Set
 
-initS = initialState
+OnEnv : Precondition → Env → Set
+OnEnv P φ = P (φ rdi) (φ rsi)
 
 funEnv : Int → Reg → Maybe Int
 funEnv n rdi = just n
@@ -314,26 +307,26 @@ mkEnv a b c d e f g h rbp = f
 mkEnv a b c d e f g h rsi = g
 mkEnv a b c d e f g h rdi = h
 
-_isFun_ : ∀ {P : Precondition} → Exp (EnvPrecondition P) → (∀ x y {{_ : P x y}} → Int) → Set
+_isFun_ : ∀ {P : Precondition} → Exp (OnEnv P) → (∀ x y {{_ : P x y}} → Int) → Set
 _isFun_ {P} e f =
   ∀ {x y vax vcx vdx vbx vsp vbp} {{_ : P x y}} →
     eval (mkEnv vax vcx vdx vbx vsp vbp y x) e ≡ just (f x y)
 
 data X86Fun (P : Precondition) (f : (x y : Int) {{_ : P x y}} → Int) : Set where
-  mkFun : ∀ {s : S (EnvPrecondition P)}
+  mkFun : ∀ {s : S (OnEnv P)}
             {{sem  : [rax] s isFun f}} →
             {{prbx : [rbx] s isReg rbx}} →
             {{prsp : [rsp] s isReg rsp}} →
             {{prbp : [rbp] s isReg rbp}} →
             {{isret : Obligation "Return" "Missing return from function."
                                  {isRet s ≡ true}}} →
-            X86Code (EnvPrecondition P) initialState s → X86Fun P f
+            X86Code (OnEnv P) initS s → X86Fun P f
 
 data X86Fun! (P : Precondition) : Set where
-  mkFun : ∀ {s : S (EnvPrecondition P)}
+  mkFun : ∀ {s : S (OnEnv P)}
             {{prbx : [rbx] s isReg rbx}} →
             {{prsp : [rsp] s isReg rsp}} →
             {{prbp : [rbp] s isReg rbp}} →
             {{isret : Obligation "Return" "Missing return from function."
                                  {isRet s ≡ true}}} →
-            X86Code (EnvPrecondition P) initialState s → X86Fun! P
+            X86Code (OnEnv P) initS s → X86Fun! P
