@@ -164,7 +164,7 @@ storeNth zero _ y (x ∷ xs)    = y ∷ xs
 storeNth (suc n) z y []       = z ∷ storeNth n z y []
 storeNth (suc n) z y (x ∷ xs) = x ∷ storeNth n z y xs
 
-data Instr (P : Env → Set) (s : S P) : S P → Set
+data Instr (P : Env → Set) ..(s : S P) : ..(t : S P) → Set
 
 -- ret --
 
@@ -325,7 +325,7 @@ LoopType P s =
 
 -- The instructions --
 
-data Instr P s where
+data Instr P ..s where
 
   ret  : RetType P s
   mov  : MovType P s
@@ -348,7 +348,7 @@ X86Code P = Path (Instr P)
 
 -- Forgetting the types --
 
-eraseInstr : ∀ {P i j} → Instr P i j → Untyped.Instr
+eraseInstr : ∀ {P} ..{i j} → Instr P i j → Untyped.Instr
 eraseInstr ret = ret
 eraseInstr (mov src dst)  = mov src dst
 eraseInstr (add src dst)  = add src dst
@@ -360,7 +360,7 @@ eraseInstr (pop dst)      = pop dst
 eraseInstr (label _)      = label
 eraseInstr (loop l)       = loop l
 
-erase : ∀ {P i j} → X86Code P i j → Untyped.X86Code
+erase : ∀ {P} ..{i j} → X86Code P i j → Untyped.X86Code
 erase = foldPath (_∷_ ∘ eraseInstr) []
 
 Precondition : Set₁
