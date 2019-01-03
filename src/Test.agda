@@ -128,34 +128,34 @@ showCode : ∀ {P s s₁} → X86Code P s s₁ → String
 showCode = showMachineCode ∘ compile
 
 jit! : ∀ {P} → X86Fun! P → IO (∀ x y {{_ : P x y}} → Int)
-jit! fun =
-  do f ← loadMachineCode (compileFun! fun)
-  -| pure (λ x y {{_}} → f x y)
+jit! fun = do
+  f ← loadMachineCode (compileFun! fun)
+  pure (λ x y {{_}} → f x y)
 
 jit : ∀ {P f} → X86Fun P f → IO (∀ x y {{_ : P x y}} → Int)
-jit fun =
-  do f ← loadMachineCode (compileFun fun)
-  -| pure (λ x y {{_}} → f x y)
+jit fun = do
+  f ← loadMachineCode (compileFun fun)
+  pure (λ x y {{_}} → f x y)
 
 jitRaw : Raw.X86Code → IO (Int → Int → Int)
 jitRaw code = loadMachineCode (C.compile code)
 
 usage : IO ⊤
-usage =
-  do prog ← getProgName
-  -| putStrLn ("Usage: " & prog & " X Y")
+usage = do
+  prog ← getProgName
+  putStrLn ("Usage: " & prog & " X Y")
 
 runRaw : Raw.X86Code → List Nat → IO ⊤
-runRaw code (x ∷ y ∷ []) =
-  do f ← jitRaw code
-  -| print (f (pos x) (pos y))
+runRaw code (x ∷ y ∷ []) = do
+  f ← jitRaw code
+  print (f (pos x) (pos y))
 runRaw _ _ = usage
 
 run : List Nat → IO ⊤
 run (x ∷ zero ∷ []) = putStrLn "Sorry, no division by 0."
-run (x ∷ suc y ∷ []) =
-  do f ← jit fun
-  -| print (f (pos x) (pos (suc y)))
+run (x ∷ suc y ∷ []) = do
+  f ← jit fun
+  print (f (pos x) (pos (suc y)))
 run _ = usage
 
 iterate : {A : Set} → Nat → (A → A) → A → A
@@ -168,21 +168,21 @@ q = 50023
 M = p * q
 
 runBBS : List Nat → IO ⊤
-runBBS (0 ∷ x ∷ n ∷ []) =
-  do step ← jit blumblumshubStep
-  -| print (iterate n (λ x → step x M) (pos x))
+runBBS (0 ∷ x ∷ n ∷ []) = do
+  step ← jit blumblumshubStep
+  print (iterate n (λ x → step x M) (pos x))
 runBBS (1 ∷ x ∷ n ∷ []) =
   print (iterate n (λ x → x * x rem M) (pos x))
-runBBS (2 ∷ x ∷ n ∷ []) =
-  do bbs ← jitRaw (blumblumRaw M)
-  -| print (bbs (pos x) (pos n))
-runBBS (3 ∷ x ∷ suc n ∷ []) =
-  do bbs ← jit (blumblumTyped' M)
-  -| print (bbs (pos x) (pos (suc n)))
+runBBS (2 ∷ x ∷ n ∷ []) = do
+  bbs ← jitRaw (blumblumRaw M)
+  print (bbs (pos x) (pos n))
+runBBS (3 ∷ x ∷ suc n ∷ []) = do
+  bbs ← jit (blumblumTyped' M)
+  print (bbs (pos x) (pos (suc n)))
 runBBS _ = usage
 
 main : IO ⊤
-main =
-  do args ← getArgs
-  -| maybe usage runBBS (traverse parseNat args)
+main = do
+  args ← getArgs
+  maybe usage runBBS (traverse parseNat args)
   -- -| maybe usage (runRaw rawCode) (traverse parseNat args)

@@ -33,9 +33,9 @@ setLabel : C ⊤
 setLabel = _ <$ modify λ s → record s { labels = St.labels s ++ length (St.code s) ∷ [] }
 
 getLabel : Nat → C Int
-getLabel i =
-  do s ← get
-  -| case index (St.labels s) i of λ where
+getLabel i = do
+  s ← get
+  case index (St.labels s) i of λ where
        nothing  → pure 1 -- TODO: guarantee well-scoped labels in untyped
        (just a) → pure (fromNat a - fromNat (length (St.code s)))
 
@@ -107,10 +107,10 @@ compileInstr (pop (reg r)) = output $
 
 compileInstr label = setLabel
 
-compileInstr (loop l) =
-  do output (0xe2 ∷ [])
-  ~| offs ← getLabel l
-  -| output (intToByte (offs - 1) ∷ []) -- -1 to account for addr byte
+compileInstr (loop l) = do
+  output (0xe2 ∷ [])
+  offs ← getLabel l
+  output (intToByte (offs - 1) ∷ []) -- -1 to account for addr byte
 
 compile : X86Code → MachineCode
 compile code = runC (traverse compileInstr code)

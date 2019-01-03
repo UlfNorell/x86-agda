@@ -2,7 +2,6 @@
 module X86.Common where
 
 open import Prelude
-open import Structure.Smashed
 open import Tactic.Deriving.Eq
 
 iterInt : {A : Set} → Int → (A → A) → A → A
